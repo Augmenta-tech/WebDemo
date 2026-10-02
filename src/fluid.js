@@ -24,6 +24,10 @@ SOFTWARE.
 
 'use strict';
 
+// Adapted from upstream commit a2d292931f19d9b3b9f564e23e6c32729d2121c3.
+// Rendering, shaders, and default visual parameters are intentionally preserved;
+// only page UI/pointer input were replaced by an external emitter API.
+
 // Simulation section
 
 export function createFluidSimulation(canvas, { ditheringUrl } = {}) {
