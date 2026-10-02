@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0c0f14">
   <meta name="color-scheme" content="dark">
-  <link rel="icon" type="image/png" href="./augmenta-favicon.png?v=4">
-  <link rel="shortcut icon" type="image/png" href="./augmenta-favicon.png?v=4">
-  <link rel="apple-touch-icon" href="./augmenta-favicon.png?v=4">
+  <link rel="icon" type="image/png" href="./augmenta-favicon.png?v=5">
+  <link rel="shortcut icon" type="image/png" href="./augmenta-favicon.png?v=5">
+  <link rel="apple-touch-icon" href="./augmenta-favicon.png?v=5">
   <title>Augmenta Web Demo</title>
   <meta name="description" content="Interactive real-time spatial data demo powered by Augmenta.">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -127,6 +127,48 @@
         </div>
       </details>
 
+      <details id="data-section" class="panel-section debug-panel" open>
+        <summary class="section-summary">
+          <span class="section-chevron" aria-hidden="true"></span>
+          <span class="panel-heading-copy">
+            <span class="panel-title">Augmenta data</span>
+          </span>
+          <span id="summary" class="panel-summary-value">No data yet</span>
+        </summary>
+
+        <div class="panel-content">
+          <div class="display-scenes">
+            <div class="field-heading">
+              <label for="scenes">Scenes</label>
+              <button id="reset-camera" class="text-action" type="button">Reset camera</button>
+            </div>
+            <select id="scenes" disabled>
+              <option value="all">All scenes</option>
+            </select>
+          </div>
+
+          <div class="toggles data-overlay-controls">
+            <div class="toggle-column">
+              <label><input id="show-clusters" type="checkbox" checked> Clusters</label>
+              <label><input id="show-points" type="checkbox" checked> Point clouds</label>
+              <label><input id="show-vectors" type="checkbox" checked> Velocity vectors</label>
+            </div>
+            <div class="toggle-column">
+              <label><input id="show-scene" type="checkbox" checked> Scenes</label>
+              <label><input id="show-zones" type="checkbox" checked> Zones</label>
+            </div>
+          </div>
+
+          <div class="panel-actions data-panel-actions">
+            <button id="clear" class="text-action" type="button">Clear data</button>
+          </div>
+
+          <div id="debug-content" class="debug-content">
+            <div class="empty-state">Connect to Augmenta or run the demo to inspect the stream.</div>
+          </div>
+        </div>
+      </details>
+
       <details id="visuals-section" class="panel-section" open>
         <summary class="section-summary">
           <span class="section-chevron" aria-hidden="true"></span>
@@ -138,11 +180,18 @@
 
         <div class="panel-content">
           <div class="visual-preset-field">
-            <label for="visual-preset">Preset</label>
+            <div class="field-heading">
+              <label for="visual-preset">Preset</label>
+              <div class="preset-actions">
+                <button id="visual-preset-save" class="text-action" type="button">Save as</button>
+                <button id="visual-preset-delete" class="text-action" type="button" hidden disabled>Delete</button>
+              </div>
+            </div>
             <select id="visual-preset">
               <option value="default" selected>Default</option>
               <option value="custom" hidden disabled>Custom</option>
             </select>
+            <p class="field-subtitle">Saved presets stay local to this browser.</p>
           </div>
 
           <label class="advanced-toggle visual-master-toggle">
@@ -285,48 +334,6 @@
         </div>
       </details>
 
-      <details id="debug-section" class="panel-section debug-panel" open>
-        <summary class="section-summary">
-          <span class="section-chevron" aria-hidden="true"></span>
-          <span class="panel-heading-copy">
-            <span class="panel-title">Augmenta data</span>
-          </span>
-          <span id="summary" class="panel-summary-value">No data yet</span>
-        </summary>
-
-        <div class="panel-content">
-          <div class="display-scenes">
-            <div class="field-heading">
-              <label for="scenes">Scenes</label>
-              <button id="reset-camera" class="text-action" type="button">Reset camera</button>
-            </div>
-            <select id="scenes" disabled>
-              <option value="all">All scenes</option>
-            </select>
-          </div>
-
-          <div class="toggles data-overlay-controls">
-            <div class="toggle-column">
-              <label><input id="show-clusters" type="checkbox" checked> Clusters</label>
-              <label><input id="show-points" type="checkbox" checked> Point clouds</label>
-              <label><input id="show-vectors" type="checkbox" checked> Velocity vectors</label>
-            </div>
-            <div class="toggle-column">
-              <label><input id="show-scene" type="checkbox" checked> Scenes</label>
-              <label><input id="show-zones" type="checkbox" checked> Zones</label>
-            </div>
-          </div>
-
-          <div class="panel-actions data-panel-actions">
-            <button id="clear" class="text-action" type="button">Clear data</button>
-          </div>
-
-          <div id="debug-content" class="debug-content">
-            <div class="empty-state">Connect to Augmenta or run the demo to inspect the stream.</div>
-          </div>
-        </div>
-      </details>
-
       <footer class="sidebar-footer">
         <div class="sidebar-footer-app">
           <div class="sidebar-footer-title">Augmenta Web Demo</div>
@@ -340,7 +347,7 @@
             rel="noopener noreferrer"
             aria-label="Visit the Augmenta website"
           >
-            <img src="./augmenta-favicon.png?v=4" alt="" width="16" height="16">
+            <img src="./augmenta-favicon.png?v=5" alt="" width="16" height="16">
             <span>augmenta.tech</span>
           </a>
           <span id="app-version">Version —</span>

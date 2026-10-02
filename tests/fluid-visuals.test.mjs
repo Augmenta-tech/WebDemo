@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -86,6 +86,8 @@ test('Visuals exposes Pavel controls, presets, and Augmenta splat inputs', () =>
 
   for (const id of [
     'visual-preset',
+    'visual-preset-save',
+    'visual-preset-delete',
     'visual-dye-resolution',
     'visual-sim-resolution',
     'visual-density-dissipation',
@@ -112,6 +114,12 @@ test('Visuals exposes Pavel controls, presets, and Augmenta splat inputs', () =>
   assert.ok(html.includes('<option value="bounding-box">Bounding box</option>'));
   assert.ok(!html.includes('id="display-section"'));
   assert.ok(html.includes('<span class="panel-title">Augmenta data</span>'));
+  assert.ok(
+    html.indexOf('id="data-section"') < html.indexOf('id="visuals-section"'),
+    'Augmenta data should appear before Visuals'
+  );
+  assert.ok(html.includes('./augmenta-favicon.png?v=5'));
+  assert.ok(existsSync(new URL('../augmenta-favicon.png', import.meta.url)));
 });
 
 test('Three.js debug renderer is transparent so selected data draws above fluid', () => {
