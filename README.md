@@ -2,33 +2,37 @@
 
 Browser-based Augmenta demo for real-time spatial interaction.
 
-This repository is intentionally based on the current
-[Augmenta Three.js example](https://github.com/Augmenta-tech/Augmenta-ThreeJS-example)
-so connection handling, setup parsing, scene selection, debug data, QR sharing,
-sidebar behavior, persistence, mobile behavior, and GitHub Pages deployment stay
-aligned with the reference implementation.
-
-The Web Demo adds an independent 2D data-visual layer on top of that base. Disable
-**Visuals → Data visuals** at any time to reveal the original Three.js viewer.
+The application shell stays aligned with
+[Augmenta Three.js example](https://github.com/Augmenta-tech/Augmenta-ThreeJS-example):
+connection handling, setup parsing, scene selection, debug data, QR sharing,
+sidebar behavior, persistence, mobile behavior, and GitHub Pages deployment are
+kept intact.
 
 ## Visuals
 
-The default visual mode is a front-facing technical/data-art view with:
+The default visual mode is now a direct adaptation of
+[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation).
 
-- colored point-cloud silhouettes
-- tracked bounding boxes and centroids
-- velocity cues
-- point-cloud-driven GPU fluid field and motion trails
-- scene grid and frame
-- zone markers
-- glow and labels
-- Punchy, Cool, and Monochrome palettes
+The simulation keeps the reference project's default visual parameters and
+rendering pipeline: 128 simulation resolution, 1024 dye resolution, density and
+velocity dissipation, pressure solve, vorticity, shading, bloom, sunrays, and the
+original dithering texture.
 
-The visual layer is implemented in `src/visuals.js` and does not replace the
-reference Three.js renderer in `src/viewer.js`. Its optional fluid field lives
-in `src/fluid.js`: current point-cloud samples continuously seed dye and velocity,
-so the recognizable point silhouette stays sharp while color flows around and
-behind it.
+The only intentional input change is the effector source:
+
+- mouse and multitouch input are removed
+- Augmenta point clouds are projected to the fluid canvas
+- each cloud is evenly subsampled to a bounded number of emitters
+- sampled point motion drives the same splat force path used by pointer motion
+- emitter colors follow the reference simulation's colorful pointer behavior
+- emitter count is shared across simultaneous point clouds to keep the effect
+  responsive and visually close to the original
+
+The fluid canvas is the primary visual when **Visuals → Fluid simulation** is
+enabled. Disable it to reveal the original Three.js debug viewer underneath.
+
+The adapted fluid engine lives in `src/fluid.js`; the point-cloud-to-emitter
+bridge is isolated in `src/visuals.js`.
 
 ## Run
 
@@ -47,5 +51,5 @@ an Augmenta server.
 
 ## Deployment
 
-GitHub Pages is deployed from `main` by the workflow in
+GitHub Pages is deployed from `main` by
 `.github/workflows/pages.yml`.
