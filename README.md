@@ -11,7 +11,7 @@ kept intact.
 ## Visuals
 
 The default visual mode is now a direct adaptation of
-[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation).
+[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation) at upstream commit `a2d292931f19d9b3b9f564e23e6c32729d2121c3`.
 
 The simulation keeps the reference project's default visual parameters and
 rendering pipeline: 128 simulation resolution, 1024 dye resolution, density and
