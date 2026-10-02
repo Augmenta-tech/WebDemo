@@ -10,13 +10,13 @@ import {
 export function makeDemoSetup() {
   const zoneA = new Container(ContainerType.Zone, 'Welcome zone', '/Demo/Welcome', [2.9, 0.01, -2.8], [0, -12, 0], [0.42, 0.69, 1, 1], new ZoneParameters(ShapeType.Box, { size: [2.8, 0.05, 2.4] }), []);
   const zoneB = new Container(ContainerType.Zone, 'Interaction zone', '/Demo/Interaction', [6.7, 0, -5.3], [0, 0, 0], [0.75, 0.48, 1, 1], new ZoneParameters(ShapeType.Cylinder, { radius: 1.2, height: 1.6 }, 'y'), []);
-  const scene = new Container(ContainerType.Scene, 'Three.js demo scene', '/Demo', [-5, 0, 4], [0, 0, 0], [0.35, 0.4, 0.5, 1], { size: [10, 4, 8] }, [zoneA, zoneB]);
+  const scene = new Container(ContainerType.Scene, 'Web demo scene', '/Demo', [-5, 0, 4], [0, 0, 0], [0.35, 0.4, 0.5, 1], { size: [10, 4, 8] }, [zoneA, zoneB]);
   const world = new Container(ContainerType.World, 'World', '', [0, 0, 0], [0, 0, 0], [0, 0, 0, 0], {}, [scene]);
   return new ControlMessage(ControlMessageType.Setup, world, ControlMessageStatus.Ok, '', 3);
 }
 
 export function makeDemoFrame(t) {
-  const objects = [0, 1, 2].map((index) => demoObject(index, t));
+  const objects = [0, 1].map((index) => demoObject(index, t));
   const zones = [
     new ZoneEventPacket('/Demo/Welcome', 0, 0, 1, 0.31, [new ZoneEventProperty(ZonePropertyType.XYPad, { x: (Math.sin(t * 0.8) + 1) / 2, y: (Math.cos(t * 0.6) + 1) / 2 })]),
     new ZoneEventPacket('/Demo/Interaction', 0, 0, 2, 0.67, [new ZoneEventProperty(ZonePropertyType.Slider, { value: (Math.sin(t) + 1) / 2 })])
@@ -48,7 +48,7 @@ function demoObject(index, t) {
 }
 
 function demoCloud(centroid, size, index, t) {
-  const count = 120;
+  const count = 260;
   const points = new Float32Array(count * 3);
   const intensity = new Float32Array(count);
   for (let i = 0; i < count; i++) {
