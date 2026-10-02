@@ -62,6 +62,7 @@ export function createFluidField() {
 
   const quad = createFullscreenQuad(gl);
   const programs = createPrograms(gl);
+  const splatBatch = createSplatBatch(gl, programs.inject);
   let buffers;
   let displayWidth = 1;
   let displayHeight = 1;
@@ -122,38 +123,19 @@ export function createFluidField() {
 
   function applySplats(splats) {
     if (!splats.length) return;
-
-    gl.disable(gl.BLEND);
-
-    for (const splat of splats) {
-      const x = clamp01(splat.x);
-      const y = clamp01(splat.y);
-      const radius = Math.max(Number(splat.radius) || 0.0001, 0.00001);
-      const dx = clamp(Number(splat.dx) || 0, -2000, 2000);
-      const dy = clamp(Number(splat.dy) || 0, -2000, 2000);
-      const color = normalizeColor(splat.color);
-      const amount = clamp(Number(splat.amount) || 1, 0, 3);
-
-      programs.splat.use();
-      gl.uniform1f(programs.splat.uniforms.aspectRatio, aspectRatio);
-      gl.uniform2f(programs.splat.uniforms.point, x, y);
-      gl.uniform1f(programs.splat.uniforms.radius, radius);
-
-      gl.uniform1i(programs.splat.uniforms.uTarget, buffers.velocity.read.attach(0));
-      gl.uniform3f(programs.splat.uniforms.color, dx, dy, 0);
-      quad.blit(buffers.velocity.write);
-      buffers.velocity.swap();
-
-      gl.uniform1i(programs.splat.uniforms.uTarget, buffers.dye.read.attach(0));
-      gl.uniform3f(
-        programs.splat.uniforms.color,
-        color[0] * amount,
-        color[1] * amount,
-        color[2] * amount
-      );
-      quad.blit(buffers.dye.write);
-      buffers.dye.swap();
-    }
+    splatBatch.draw(
+      splats.map((splat) => ({
+        x: clamp01(splat.x),
+        y: clamp01(splat.y),
+        dx: clamp(Number(splat.dx) || 0, -2000, 2000),
+        dy: clamp(Number(splat.dy) || 0, -2000, 2000),
+        color: normalizeColor(splat.color),
+        radius: Math.max(Number(splat.radius) || 0.0001, 0.00001),
+        amount: clamp(Number(splat.amount) || 1, 0, 3)
+      })),
+      buffers.velocity.read,
+      buffers.dye.read
+    );
   }
 
   function simulate(dt) {
@@ -340,7 +322,7 @@ function supportedFormat(gl, internalFormat, format, type) {
 function createPrograms(gl) {
   return {
     clear: createProgram(gl, BASE_VERTEX, CLEAR_FRAGMENT),
-    splat: createProgram(gl, BASE_VERTEX, SPLAT_FRAGMENT),
+    inject: createProgram(gl, POINT_VERTEX, POINT_FRAGMENT),
     advection: createProgram(gl, BASE_VERTEX, ADVECTION_FRAGMENT),
     divergence: createProgram(gl, BASE_VERTEX, DIVERGENCE_FRAGMENT),
     curl: createProgram(gl, BASE_VERTEX, CURL_FRAGMENT),
@@ -371,14 +353,22 @@ function createProgram(gl, vertexSource, fragmentSource) {
   gl.deleteShader(fragment);
 
   const uniforms = {};
-  const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-  for (let i = 0; i < count; i++) {
+  const uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < uniformCount; i++) {
     const name = gl.getActiveUniform(program, i).name;
     uniforms[name] = gl.getUniformLocation(program, name);
   }
 
+  const attributes = {};
+  const attributeCount = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
+  for (let i = 0; i < attributeCount; i++) {
+    const name = gl.getActiveAttrib(program, i).name;
+    attributes[name] = gl.getAttribLocation(program, name);
+  }
+
   return {
     uniforms,
+    attributes,
     use() {
       gl.useProgram(program);
     }
@@ -422,6 +412,11 @@ function createFullscreenQuad(gl) {
 
   return {
     blit(target) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(0);
+
       if (target) {
         gl.viewport(0, 0, target.width, target.height);
         gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
@@ -431,6 +426,74 @@ function createFullscreenQuad(gl) {
       gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
     }
   };
+}
+
+function createSplatBatch(gl, program) {
+  const buffer = gl.createBuffer();
+  const components = 10;
+  const stride = components * Float32Array.BYTES_PER_ELEMENT;
+
+  function attribute(name, size, offset) {
+    const location = program.attributes[name];
+    if (location === undefined || location < 0) return;
+    gl.enableVertexAttribArray(location);
+    gl.vertexAttribPointer(
+      location,
+      size,
+      gl.FLOAT,
+      false,
+      stride,
+      offset * Float32Array.BYTES_PER_ELEMENT
+    );
+  }
+
+  function draw(splats, velocityTarget, dyeTarget) {
+    if (!splats.length) return;
+
+    const data = new Float32Array(splats.length * components);
+    let cursor = 0;
+    for (const splat of splats) {
+      data[cursor++] = splat.x;
+      data[cursor++] = splat.y;
+      data[cursor++] = splat.color[0];
+      data[cursor++] = splat.color[1];
+      data[cursor++] = splat.color[2];
+      data[cursor++] = splat.dx;
+      data[cursor++] = splat.dy;
+      data[cursor++] = splat.radius;
+      data[cursor++] = splat.amount;
+      data[cursor++] = 0;
+    }
+
+    program.use();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+
+    attribute('aPoint', 2, 0);
+    attribute('aColor', 3, 2);
+    attribute('aVelocity', 2, 5);
+    attribute('aRadius', 1, 7);
+    attribute('aAmount', 1, 8);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+
+    gl.uniform1f(program.uniforms.pass, 0);
+    gl.uniform1f(program.uniforms.targetHeight, velocityTarget.height);
+    gl.viewport(0, 0, velocityTarget.width, velocityTarget.height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, velocityTarget.fbo);
+    gl.drawArrays(gl.POINTS, 0, splats.length);
+
+    gl.uniform1f(program.uniforms.pass, 1);
+    gl.uniform1f(program.uniforms.targetHeight, dyeTarget.height);
+    gl.viewport(0, 0, dyeTarget.width, dyeTarget.height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dyeTarget.fbo);
+    gl.drawArrays(gl.POINTS, 0, splats.length);
+
+    gl.disable(gl.BLEND);
+  }
+
+  return { draw };
 }
 
 function createFBO(gl, width, height, textureFormat, type, filtering) {
@@ -561,6 +624,46 @@ function clamp01(value) {
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
+
+const POINT_VERTEX = `
+precision highp float;
+
+attribute vec2 aPoint;
+attribute vec3 aColor;
+attribute vec2 aVelocity;
+attribute float aRadius;
+attribute float aAmount;
+uniform float targetHeight;
+varying vec3 vColor;
+varying vec2 vVelocity;
+varying float vAmount;
+
+void main() {
+  gl_Position = vec4(aPoint * 2.0 - 1.0, 0.0, 1.0);
+  gl_PointSize = clamp(sqrt(max(aRadius, 0.000001)) * targetHeight * 2.4, 2.0, 56.0);
+  vColor = aColor;
+  vVelocity = aVelocity;
+  vAmount = aAmount;
+}
+`;
+
+const POINT_FRAGMENT = `
+precision highp float;
+
+varying vec3 vColor;
+varying vec2 vVelocity;
+varying float vAmount;
+uniform float pass;
+
+void main() {
+  vec2 p = gl_PointCoord - 0.5;
+  float falloff = exp(-dot(p, p) * 13.0);
+  vec3 value = pass < 0.5
+    ? vec3(vVelocity * falloff, 0.0)
+    : vColor * vAmount * falloff;
+  gl_FragColor = vec4(value, 1.0);
+}
+`;
 
 const BASE_VERTEX = `
 precision highp float;
