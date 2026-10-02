@@ -857,3 +857,32 @@ button.subtle-button.active {
     grid-column: 1 / -1;
   }
 }
+
+
+/* Web Demo visual controls */
+.visual-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #090b11;
+}
+
+.visual-palette-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.visual-palette-field label {
+  color: #aeb6c5;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.visual-palette-field select {
+  width: 100%;
+}
+
+.visuals-panel .panel-subtitle {
+  color: #7f8999;
+}
