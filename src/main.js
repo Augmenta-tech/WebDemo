@@ -65,6 +65,8 @@ const visuals = createVisuals($('#canvas-host'));
 const debug = createDebugPanel(ui.summary, ui.debug);
 const defaultVisualPreset = visuals.getPreset('default').options;
 
+populateVisualPresetOptions();
+
 let disconnectCleanupTimer;
 let cameraPreferenceSaveTimer;
 let sidebarHandleIdleTimer;
@@ -541,6 +543,15 @@ function applyVisibility() {
     zones: ui.showZones.checked,
     vectors: ui.showVectors.checked
   });
+}
+
+function populateVisualPresetOptions() {
+  ui.visualPreset.innerHTML = [
+    ...visuals.getPresets().map(({ name, label }) => (
+      `<option value="${escapeOption(name)}">${escapeOption(label)}</option>`
+    )),
+    '<option value="custom" hidden disabled>Custom</option>'
+  ].join('');
 }
 
 function visualSettingsFromUi() {
