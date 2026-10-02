@@ -9,10 +9,10 @@ import {
 } from '../src/visuals.js';
 
 test('emitter budget stays bounded and shares capacity across clouds', () => {
-  assert.equal(emitterBudget(1), 12);
-  assert.equal(emitterBudget(2), 12);
-  assert.equal(emitterBudget(3), 8);
-  assert.equal(emitterBudget(6), 4);
+  assert.equal(emitterBudget(1), 8);
+  assert.equal(emitterBudget(2), 8);
+  assert.equal(emitterBudget(3), 5);
+  assert.equal(emitterBudget(6), 2);
   assert.equal(emitterBudget(24), 1);
   assert.equal(emitterBudget(100), 1);
 });
