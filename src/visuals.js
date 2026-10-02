@@ -1,7 +1,34 @@
+import { createFluidField } from './fluid.js';
+
 const BACKGROUND = '#090b11';
 const STALE_MS = 360;
 const EASING_MS = 70;
 const MAX_POINTS = 1400;
+const FLUID_POINTS_PER_OBJECT = 32;
+
+const FLUID_RESPONSES = {
+  soft: {
+    dye: 0.065,
+    radius: 0.00007,
+    motion: 720,
+    swirl: 180,
+    opacity: 0.58
+  },
+  balanced: {
+    dye: 0.095,
+    radius: 0.00011,
+    motion: 980,
+    swirl: 260,
+    opacity: 0.74
+  },
+  expressive: {
+    dye: 0.14,
+    radius: 0.00016,
+    motion: 1320,
+    swirl: 360,
+    opacity: 0.88
+  }
+};
 
 const PALETTES = {
   punchy: ['#38e8ff', '#ff4fd8', '#a4ff56', '#ffb02e', '#7f7cff', '#ff5c69'],
@@ -18,6 +45,7 @@ export function createVisuals(host) {
   const trailCanvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
   const trail = trailCanvas.getContext('2d');
+  const fluid = safeCreateFluidField();
 
   const objects = new Map();
   let width = 1;
@@ -27,6 +55,7 @@ export function createVisuals(host) {
   let lastDraw = performance.now();
   let scene = defaultScene();
   let zones = [];
+  let fluidSamplePhase = 0;
 
   const visibility = {
     clusters: true,
@@ -42,6 +71,8 @@ export function createVisuals(host) {
     grid: true,
     glow: true,
     labels: true,
+    fluid: true,
+    fluidResponse: 'balanced',
     palette: 'punchy'
   };
 
@@ -158,17 +189,18 @@ export function createVisuals(host) {
     }
 
     canvas.hidden = !options.enabled;
-    if (options.enabled) draw(now);
+    if (options.enabled) draw(now, dt / 1000);
     requestAnimationFrame(animate);
   }
 
-  function draw(now) {
+  function draw(now, dt) {
     const projection = makeProjection();
 
     drawBackground(projection, now);
     if (options.grid) drawGrid(projection, now);
     if (visibility.scene) drawSceneFrame(projection);
 
+    drawFluid(projection, now, dt);
     updateTrails(projection);
     if (options.trails) ctx.drawImage(trailCanvas, 0, 0, width, height);
 
@@ -259,6 +291,89 @@ export function createVisuals(host) {
     cornerMark(ctx, p.left, p.bottom, 1, -1, corner);
     cornerMark(ctx, p.right, p.bottom, -1, -1, corner);
     ctx.restore();
+  }
+
+  function drawFluid(p, now, dt) {
+    if (!options.fluid || !visibility.points || !fluid.supported) return;
+
+    const response = FLUID_RESPONSES[options.fluidResponse]
+      || FLUID_RESPONSES.balanced;
+    const splats = collectFluidSplats(p, now, response);
+
+    fluid.update(width, height, pixelRatio, dt, splats, { glow: options.glow });
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = response.opacity;
+    ctx.drawImage(fluid.canvas, 0, 0, width, height);
+    ctx.restore();
+  }
+
+  function collectFluidSplats(p, now, response) {
+    const splats = [];
+    const sceneWidth = Math.max(scene.maxX - scene.minX, 0.001);
+    const sceneHeight = Math.max(scene.maxY - scene.minY, 0.001);
+
+    for (const view of objects.values()) {
+      const data = view.points;
+      if (!data?.length) continue;
+
+      const color = hexToRgb01(objectColor(view));
+      const pointCount = Math.floor(data.length / 3);
+      const sampleCount = Math.min(FLUID_POINTS_PER_OBJECT, pointCount);
+      const step = pointCount / Math.max(sampleCount, 1);
+      const centroidX = p.x(view.centroid[0]) / Math.max(width, 1);
+      const centroidY = 1 - p.y(view.centroid[1]) / Math.max(height, 1);
+      const baseDx = (Number(view.velocity[0]) || 0) / sceneWidth * response.motion;
+      const baseDy = (Number(view.velocity[1]) || 0) / sceneHeight * response.motion;
+
+      for (let sample = 0; sample < sampleCount; sample++) {
+        const pointIndex = Math.floor(
+          (sample * step + fluidSamplePhase * 0.37) % pointCount
+        );
+        const offset = pointIndex * 3;
+        const screenX = p.x(data[offset]);
+        const screenY = p.y(data[offset + 1]);
+
+        if (
+          screenX < p.left
+          || screenX > p.right
+          || screenY < p.top
+          || screenY > p.bottom
+        ) {
+          continue;
+        }
+
+        const x = screenX / Math.max(width, 1);
+        const y = 1 - screenY / Math.max(height, 1);
+        const rx = x - centroidX;
+        const ry = y - centroidY;
+        const pulse = Math.sin(now * 0.0014 + pointIndex * 0.41) * 8;
+
+        splats.push({
+          x,
+          y,
+          dx: baseDx - ry * response.swirl + pulse,
+          dy: baseDy + rx * response.swirl - pulse * 0.35,
+          color,
+          radius: response.radius,
+          amount: response.dye
+        });
+      }
+
+      splats.push({
+        x: centroidX,
+        y: centroidY,
+        dx: baseDx * 1.35,
+        dy: baseDy * 1.35,
+        color,
+        radius: response.radius * 4.8,
+        amount: response.dye * 0.32
+      });
+    }
+
+    fluidSamplePhase = (fluidSamplePhase + 1) % 4096;
+    return splats;
   }
 
   function updateTrails(p) {
@@ -470,22 +585,27 @@ export function createVisuals(host) {
   }
 
   function setOptions(next) {
+    const fluidWasEnabled = options.fluid;
     Object.assign(options, next);
     if (!options.trails) trail.clearRect(0, 0, width, height);
+    if (fluidWasEnabled && !options.fluid) fluid.clear();
   }
 
   function clearTracking() {
     objects.clear();
     trail.clearRect(0, 0, width, height);
+    fluid.clear();
   }
 
   function clearSetup() {
     scene = defaultScene();
     zones = [];
+    fluid.clear();
   }
 
   function reset() {
     trail.clearRect(0, 0, width, height);
+    fluid.clear();
   }
 
   function setRightInset(value) {
@@ -575,4 +695,28 @@ function colorAlpha(hex, alpha) {
   const g = Number.parseInt(value.slice(2, 4), 16);
   const b = Number.parseInt(value.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
+}
+
+
+function safeCreateFluidField() {
+  try {
+    return createFluidField();
+  } catch (error) {
+    console.warn('Fluid visuals unavailable:', error);
+    return {
+      canvas: document.createElement('canvas'),
+      supported: false,
+      clear() {},
+      update() {}
+    };
+  }
+}
+
+function hexToRgb01(hex) {
+  const value = String(hex).replace('#', '');
+  return [
+    Number.parseInt(value.slice(0, 2), 16) / 255,
+    Number.parseInt(value.slice(2, 4), 16) / 255,
+    Number.parseInt(value.slice(4, 6), 16) / 255
+  ];
 }
