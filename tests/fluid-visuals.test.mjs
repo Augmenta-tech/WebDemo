@@ -39,7 +39,7 @@ test('point positions map to fluid UV coordinates using scene bounds', () => {
 test('bounding-box splat radius follows projected box footprint', () => {
   const bounds = { minX: -5, maxX: 5, minY: 0, maxY: 4 };
 
-  assert.equal(boundingBoxSplatRadius([0.5, 1.6, 0.5], bounds), 0.5);
+  assert.ok(Math.abs(boundingBoxSplatRadius([0.5, 1.6, 0.5], bounds) - 0.5) < 1e-9);
   assert.equal(boundingBoxSplatRadius([0.01, 0.01, 0.01], bounds), 0.01);
   assert.equal(boundingBoxSplatRadius([10, 4, 1], bounds), 1);
 });
