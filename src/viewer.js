@@ -33,23 +33,26 @@ const PALETTE = [
 
 export function createViewer(host) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0c0f14);
+  scene.background = null;
   scene.fog = new THREE.FogExp2(0x0c0f14, 0.014);
 
   const camera = new THREE.PerspectiveCamera(48, 1, 0.02, 500);
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.domElement.classList.add('debug-viewer-canvas');
   host.appendChild(renderer.domElement);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   configureControls(controls);
 
+  const sceneHelperGroup = namedGroup(scene, 'Scene helpers');
   const grid = new THREE.GridHelper(100, 100, 0x4d5668, 0x252b35);
   grid.material.transparent = true;
   grid.material.opacity = 0.52;
   grid.material.depthWrite = false;
-  scene.add(grid, new THREE.AxesHelper(1));
+  sceneHelperGroup.add(grid, new THREE.AxesHelper(1));
 
   const setupGroup = namedGroup(scene, 'Augmenta scene setup');
   const clusterGroup = namedGroup(scene, 'Tracked clusters');
@@ -543,6 +546,7 @@ export function createViewer(host) {
     visibility.zones = zones;
     visibility.vectors = vectors;
 
+    sceneHelperGroup.visible = scene;
     clusterGroup.visible = clusters;
     pointGroup.visible = points;
     vectorGroup.visible = vectors;
