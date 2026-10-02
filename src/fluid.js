@@ -1006,6 +1006,10 @@ function update (dt, emitters = []) {
     render(null);
 }
 
+function clamp01 (value) {
+    return Math.min(Math.max(value, 0), 1);
+}
+
 function applyEmitters (emitters) {
     for (const emitter of emitters) {
         const x = clamp01(Number(emitter.x) || 0);
