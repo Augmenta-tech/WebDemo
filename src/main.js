@@ -11,6 +11,14 @@ import {
   resolveConnectionOptions
 } from './share-link.js';
 import { refreshConnectionQr } from './qr.js';
+import {
+  getUserPreset,
+  isUserPresetId,
+  normalizePresetName,
+  normalizeUserPresets,
+  removeUserPreset,
+  upsertUserPreset
+} from './visual-presets.js';
 
 const DISCONNECT_CLEANUP_DELAY_MS = 500;
 const CAMERA_PREFERENCE_SAVE_DELAY_MS = 250;
@@ -28,7 +36,7 @@ const SETTINGS_STORAGE_KEY = 'augmenta-webdemo-settings:v1';
 const $ = (selector) => document.querySelector(selector);
 
 function refreshFavicon() {
-  const faviconUrl = new URL('./augmenta-favicon.png?v=4', document.baseURI).href;
+  const faviconUrl = new URL('./augmenta-favicon.png?v=5', document.baseURI).href;
   document.querySelectorAll('link[rel~="icon"]').forEach((link) => {
     if (link.href !== faviconUrl) link.href = faviconUrl;
   });
@@ -44,7 +52,7 @@ const ui = {
   connectionSection: $('#connection-section'), connectionAdvanced: $('#connection-advanced'), connectionAdvancedSummary: $('#connection-advanced-summary'),
   debugSection: $('#debug-section'), visualsSection: $('#visuals-section'), visualsSectionSummary: $('#visuals-section-summary'), appVersion: $('#app-version'),
   showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors'),
-  visualPreset: $('#visual-preset'), visualEnabled: $('#visual-enabled'),
+  visualPreset: $('#visual-preset'), visualPresetSave: $('#visual-preset-save'), visualPresetDelete: $('#visual-preset-delete'), visualEnabled: $('#visual-enabled'),
   visualDyeResolution: $('#visual-dye-resolution'), visualSimResolution: $('#visual-sim-resolution'),
   visualDensityDissipation: $('#visual-density-dissipation'), visualDensityDissipationValue: $('#visual-density-dissipation-value'),
   visualVelocityDissipation: $('#visual-velocity-dissipation'), visualVelocityDissipationValue: $('#visual-velocity-dissipation-value'),
@@ -63,11 +71,11 @@ ui.appVersion.textContent = `Version ${APP_VERSION}`;
 const viewer = createViewer($('#canvas-host'));
 const visuals = createVisuals($('#canvas-host'));
 const debug = createDebugPanel(ui.summary, ui.debug);
-const visualPresets = visuals.getPresets();
+const builtInVisualPresets = visuals.getPresets();
 const defaultVisualPreset = visuals.getPreset('default').options;
 
-populateVisualPresetOptions();
-
+let userVisualPresets = [];
+let activeVisualPresetId = 'default';
 let disconnectCleanupTimer;
 let cameraPreferenceSaveTimer;
 let sidebarHandleIdleTimer;
@@ -158,6 +166,8 @@ function savePreferences() {
       scene: preferredSceneAddress
     },
     visuals: visualSettingsFromUi(),
+    visualPreset: activeVisualPresetId,
+    visualPresets: userVisualPresets,
     ui: {
       sidebarHidden: ui.app.classList.contains('sidebar-hidden'),
       sidebarWidth: Number.isFinite(sidebarWidth) ? sidebarWidth : SIDEBAR_MAX_WIDTH,
@@ -226,10 +236,12 @@ function restorePreferences() {
     preferredSceneAddress = dataPreferences.scene;
   }
 
-  writeVisualSettings({
-    ...defaultVisualPreset,
-    ...visualPreferences
-  });
+  userVisualPresets = normalizeUserPresets(savedPreferences.visualPresets);
+  activeVisualPresetId = typeof savedPreferences.visualPreset === 'string'
+    ? savedPreferences.visualPreset
+    : 'default';
+  populateVisualPresetOptions();
+  writeVisualSettings(normalizeVisualSettings(visualPreferences));
 
   const sidebarWidth = Number(uiPreferences.sidebarWidth);
   if (Number.isFinite(sidebarWidth)) setSidebarWidth(sidebarWidth);
@@ -546,13 +558,118 @@ function applyVisibility() {
   });
 }
 
+function visualPresetDescriptors() {
+  return [
+    ...builtInVisualPresets,
+    ...userVisualPresets.map(({ id, label }) => ({ name: id, label }))
+  ];
+}
+
+function getVisualPreset(name) {
+  const builtIn = visuals.getPreset(name);
+  if (builtIn) return builtIn;
+
+  const userPreset = getUserPreset(userVisualPresets, name);
+  if (!userPreset) return undefined;
+
+  return {
+    label: userPreset.label,
+    options: normalizeVisualSettings(userPreset.options)
+  };
+}
+
 function populateVisualPresetOptions() {
+  const builtInOptions = builtInVisualPresets.map(({ name, label }) => (
+    `<option value="${escapeOption(name)}">${escapeOption(label)}</option>`
+  ));
+  const savedOptions = userVisualPresets.map(({ id, label }) => (
+    `<option value="${escapeOption(id)}">${escapeOption(label)}</option>`
+  ));
+
   ui.visualPreset.innerHTML = [
-    ...visualPresets.map(({ name, label }) => (
-      `<option value="${escapeOption(name)}">${escapeOption(label)}</option>`
-    )),
+    ...builtInOptions,
+    ...(savedOptions.length
+      ? [`<optgroup label="Saved">${savedOptions.join('')}</optgroup>`]
+      : []),
     '<option value="custom" hidden disabled>Custom</option>'
   ].join('');
+}
+
+function normalizeVisualSettings(value) {
+  const source = isObject(value) ? value : {};
+  const result = { ...defaultVisualPreset };
+
+  for (const [key, fallback] of Object.entries(defaultVisualPreset)) {
+    const candidate = source[key];
+
+    if (typeof fallback === 'boolean') {
+      if (typeof candidate === 'boolean') result[key] = candidate;
+      continue;
+    }
+
+    if (typeof fallback === 'number') {
+      const number = Number(candidate);
+      if (Number.isFinite(number)) result[key] = number;
+      continue;
+    }
+
+    if (typeof fallback === 'string' && typeof candidate === 'string') {
+      result[key] = candidate;
+    }
+  }
+
+  if (!['centroid', 'point-clouds', 'bounding-box'].includes(result.splatInput)) {
+    result.splatInput = defaultVisualPreset.splatInput;
+  }
+  if (![128, 256, 512, 1024].includes(result.dyeResolution)) {
+    result.dyeResolution = defaultVisualPreset.dyeResolution;
+  }
+  if (![32, 64, 128, 256].includes(result.simResolution)) {
+    result.simResolution = defaultVisualPreset.simResolution;
+  }
+
+  return result;
+}
+
+function saveVisualPresetAs() {
+  const currentPreset = getVisualPreset(activeVisualPresetId);
+  const suggestion = isUserPresetId(activeVisualPresetId)
+    ? currentPreset?.label ?? ''
+    : '';
+  const enteredName = window.prompt('Save visual preset as', suggestion);
+  if (enteredName === null) return;
+
+  const label = normalizePresetName(enteredName);
+  if (!label) {
+    window.alert('Preset name cannot be empty.');
+    return;
+  }
+
+  const existing = userVisualPresets.find(
+    (preset) => preset.label.toLocaleLowerCase() === label.toLocaleLowerCase()
+  );
+  if (existing && !window.confirm(`Replace saved preset "${existing.label}"?`)) return;
+
+  const result = upsertUserPreset(userVisualPresets, label, visualSettingsFromUi());
+  if (!result) return;
+
+  userVisualPresets = result.presets;
+  activeVisualPresetId = result.preset.id;
+  populateVisualPresetOptions();
+  updateVisualPresetState();
+  savePreferences();
+}
+
+function deleteVisualPreset() {
+  const preset = getUserPreset(userVisualPresets, activeVisualPresetId);
+  if (!preset) return;
+  if (!window.confirm(`Delete saved preset "${preset.label}"?`)) return;
+
+  userVisualPresets = removeUserPreset(userVisualPresets, preset.id);
+  activeVisualPresetId = 'custom';
+  populateVisualPresetOptions();
+  updateVisualPresetState();
+  savePreferences();
 }
 
 function visualSettingsFromUi() {
@@ -626,16 +743,26 @@ function visualSettingsEqual(left, right) {
 
 function updateVisualPresetState() {
   const settings = visualSettingsFromUi();
-  const matchedPreset = visualPresets.find(({ name }) => {
-    const preset = visuals.getPreset(name);
-    return preset && visualSettingsEqual(settings, preset.options);
-  });
+  const preferredPreset = getVisualPreset(activeVisualPresetId);
+  const descriptors = visualPresetDescriptors();
+  const matchedPreset = preferredPreset && visualSettingsEqual(settings, preferredPreset.options)
+    ? descriptors.find(({ name }) => name === activeVisualPresetId)
+    : descriptors.find(({ name }) => {
+        const preset = getVisualPreset(name);
+        return preset && visualSettingsEqual(settings, preset.options);
+      });
   const customOption = ui.visualPreset.querySelector('option[value="custom"]');
   const isCustom = !matchedPreset;
 
+  activeVisualPresetId = matchedPreset?.name ?? 'custom';
   customOption.hidden = !isCustom;
   customOption.disabled = !isCustom;
-  ui.visualPreset.value = matchedPreset?.name ?? 'custom';
+  ui.visualPreset.value = activeVisualPresetId;
+
+  const canDelete = isUserPresetId(activeVisualPresetId);
+  ui.visualPresetDelete.hidden = !canDelete;
+  ui.visualPresetDelete.disabled = !canDelete;
+
   ui.visualsSectionSummary.textContent = settings.enabled
     ? (matchedPreset?.label ?? 'Custom')
     : 'Off';
@@ -683,7 +810,6 @@ function syncPanelCamera(animate = false) {
   const hidden = ui.app.classList.contains('sidebar-hidden');
   const inset = isMobileLayout() || hidden ? 0 : ui.sidebar.getBoundingClientRect().width;
   viewer.setRightInset(inset, animate);
-  visuals.setRightInset(inset);
 }
 
 function isMobileLayout() {
@@ -894,13 +1020,17 @@ for (const input of visualChangeInputs) {
 }
 
 ui.visualPreset.addEventListener('change', () => {
-  const preset = visuals.getPreset(ui.visualPreset.value);
+  const preset = getVisualPreset(ui.visualPreset.value);
   if (!preset) return;
 
+  activeVisualPresetId = ui.visualPreset.value;
   writeVisualSettings(preset.options);
   applyVisualOptions();
   savePreferences();
 });
+
+ui.visualPresetSave.addEventListener('click', saveVisualPresetAs);
+ui.visualPresetDelete.addEventListener('click', deleteVisualPreset);
 
 ui.visualRandomSplats.addEventListener('click', () => {
   visuals.randomSplats();
