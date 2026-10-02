@@ -6,6 +6,7 @@ export function normalizeUserPresets(value) {
 
   const result = [];
   const seenIds = new Set();
+  const seenLabels = new Set();
 
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
@@ -13,6 +14,10 @@ export function normalizeUserPresets(value) {
     const label = normalizePresetName(item.label);
     const options = isPlainObject(item.options) ? { ...item.options } : undefined;
     if (!label || !options) continue;
+
+    const labelKey = label.toLowerCase();
+    if (seenLabels.has(labelKey)) continue;
+    seenLabels.add(labelKey);
 
     let id = typeof item.id === 'string' && item.id.startsWith(USER_PRESET_PREFIX)
       ? item.id
@@ -33,7 +38,7 @@ export function upsertUserPreset(presets, label, options) {
 
   const current = normalizeUserPresets(presets);
   const existingIndex = current.findIndex(
-    (preset) => preset.label.toLocaleLowerCase() === cleanLabel.toLocaleLowerCase()
+    (preset) => preset.label.toLowerCase() === cleanLabel.toLowerCase()
   );
 
   const preset = existingIndex >= 0
@@ -74,7 +79,7 @@ export function normalizePresetName(value) {
 
 function createPresetId(label, presets) {
   const slug = label
-    .toLocaleLowerCase()
+    .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
