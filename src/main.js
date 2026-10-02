@@ -63,6 +63,7 @@ ui.appVersion.textContent = `Version ${APP_VERSION}`;
 const viewer = createViewer($('#canvas-host'));
 const visuals = createVisuals($('#canvas-host'));
 const debug = createDebugPanel(ui.summary, ui.debug);
+const visualPresets = visuals.getPresets();
 const defaultVisualPreset = visuals.getPreset('default').options;
 
 populateVisualPresetOptions();
@@ -547,7 +548,7 @@ function applyVisibility() {
 
 function populateVisualPresetOptions() {
   ui.visualPreset.innerHTML = [
-    ...visuals.getPresets().map(({ name, label }) => (
+    ...visualPresets.map(({ name, label }) => (
       `<option value="${escapeOption(name)}">${escapeOption(label)}</option>`
     )),
     '<option value="custom" hidden disabled>Custom</option>'
@@ -625,14 +626,18 @@ function visualSettingsEqual(left, right) {
 
 function updateVisualPresetState() {
   const settings = visualSettingsFromUi();
-  const isDefault = visualSettingsEqual(settings, defaultVisualPreset);
+  const matchedPreset = visualPresets.find(({ name }) => {
+    const preset = visuals.getPreset(name);
+    return preset && visualSettingsEqual(settings, preset.options);
+  });
   const customOption = ui.visualPreset.querySelector('option[value="custom"]');
+  const isCustom = !matchedPreset;
 
-  customOption.hidden = isDefault;
-  customOption.disabled = isDefault;
-  ui.visualPreset.value = isDefault ? 'default' : 'custom';
+  customOption.hidden = !isCustom;
+  customOption.disabled = !isCustom;
+  ui.visualPreset.value = matchedPreset?.name ?? 'custom';
   ui.visualsSectionSummary.textContent = settings.enabled
-    ? (isDefault ? 'Default' : 'Custom')
+    ? (matchedPreset?.label ?? 'Custom')
     : 'Off';
 
   ui.visualSplatInputSummary.textContent =
