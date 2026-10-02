@@ -18,7 +18,7 @@ const SIDEBAR_MIN_WIDTH = 320;
 const SIDEBAR_MAX_WIDTH = 450;
 const SIDEBAR_VIEWPORT_MARGIN = 160;
 const MOBILE_MEDIA_QUERY = '(max-width: 900px), (pointer: coarse) and (max-width: 1100px)';
-const SETTINGS_STORAGE_KEY = 'augmenta-threejs-settings:v1';
+const SETTINGS_STORAGE_KEY = 'augmenta-web-demo-settings:v1';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -38,8 +38,9 @@ const ui = {
   sidebarToggle: $('#sidebar-toggle'), viewerTitle: $('.viewer-title'), connectionQrVisibility: $('.connection-qr-visibility'),
   connectionSection: $('#connection-section'), connectionAdvanced: $('#connection-advanced'), connectionAdvancedSummary: $('#connection-advanced-summary'),
   displaySection: $('#display-section'), displayAdvanced: $('#display-advanced'), displaySectionSummary: $('#display-section-summary'),
-  debugSection: $('#debug-section'), appVersion: $('#app-version'),
-  showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors')
+  debugSection: $('#debug-section'), visualsSection: $('#visuals-section'), visualsSectionSummary: $('#visuals-section-summary'), appVersion: $('#app-version'),
+  showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors'),
+  visualParticles: $('#visual-particles'), visualTrails: $('#visual-trails'), visualGrid: $('#visual-grid'), visualBounds: $('#visual-bounds'), visualGlow: $('#visual-glow'), visualLabels: $('#visual-labels'), visualPalette: $('#visual-palette')
 };
 
 ui.appVersion.textContent = `Version ${APP_VERSION}`;
@@ -136,6 +137,15 @@ function savePreferences() {
       vectors: ui.showVectors.checked,
       scene: preferredSceneAddress
     },
+    visuals: {
+      particles: ui.visualParticles.checked,
+      trails: ui.visualTrails.checked,
+      grid: ui.visualGrid.checked,
+      bounds: ui.visualBounds.checked,
+      glow: ui.visualGlow.checked,
+      labels: ui.visualLabels.checked,
+      palette: ui.visualPalette.value
+    },
     ui: {
       sidebarHidden: ui.app.classList.contains('sidebar-hidden'),
       sidebarWidth: Number.isFinite(sidebarWidth) ? sidebarWidth : SIDEBAR_MAX_WIDTH,
@@ -145,6 +155,7 @@ function savePreferences() {
         connectionAdvanced: ui.connectionAdvanced.open,
         display: ui.displaySection.open,
         displayAdvanced: ui.displayAdvanced.open,
+        visuals: ui.visualsSection.open,
         debug: ui.debugSection.open
       }
     }
@@ -176,6 +187,7 @@ function restorePreferences() {
   const connection = isObject(savedPreferences.connection) ? savedPreferences.connection : {};
   const sharedConnection = readConnectionOptionsFromUrl(window.location.href);
   const display = isObject(savedPreferences.display) ? savedPreferences.display : {};
+  const visuals = isObject(savedPreferences.visuals) ? savedPreferences.visuals : {};
   const uiPreferences = isObject(savedPreferences.ui) ? savedPreferences.ui : {};
   const sectionPreferences = isObject(uiPreferences.sections) ? uiPreferences.sections : {};
 
@@ -198,6 +210,14 @@ function restorePreferences() {
   if (typeof display.vectors === 'boolean') ui.showVectors.checked = display.vectors;
   if (typeof display.scene === 'string' && display.scene) preferredSceneAddress = display.scene;
 
+  if (typeof visuals.particles === 'boolean') ui.visualParticles.checked = visuals.particles;
+  if (typeof visuals.trails === 'boolean') ui.visualTrails.checked = visuals.trails;
+  if (typeof visuals.grid === 'boolean') ui.visualGrid.checked = visuals.grid;
+  if (typeof visuals.bounds === 'boolean') ui.visualBounds.checked = visuals.bounds;
+  if (typeof visuals.glow === 'boolean') ui.visualGlow.checked = visuals.glow;
+  if (typeof visuals.labels === 'boolean') ui.visualLabels.checked = visuals.labels;
+  if (typeof visuals.palette === 'string') ui.visualPalette.value = visuals.palette;
+
   const sidebarWidth = Number(uiPreferences.sidebarWidth);
   if (Number.isFinite(sidebarWidth)) setSidebarWidth(sidebarWidth);
   setSidebarHidden(uiPreferences.sidebarHidden === true, false);
@@ -207,6 +227,7 @@ function restorePreferences() {
     ['connectionAdvanced', ui.connectionAdvanced],
     ['display', ui.displaySection],
     ['displayAdvanced', ui.displayAdvanced],
+    ['visuals', ui.visualsSection],
     ['debug', ui.debugSection]
   ]) {
     if (typeof sectionPreferences[key] === 'boolean') {
@@ -512,6 +533,19 @@ function applyVisibility() {
   });
 }
 
+function applyVisualOptions() {
+  viewer.setVisualOptions({
+    particles: ui.visualParticles.checked,
+    trails: ui.visualTrails.checked,
+    grid: ui.visualGrid.checked,
+    bounds: ui.visualBounds.checked,
+    glow: ui.visualGlow.checked,
+    labels: ui.visualLabels.checked,
+    palette: ui.visualPalette.value
+  });
+  ui.visualsSectionSummary.textContent = ui.visualPalette.selectedOptions[0]?.textContent ?? 'Punchy';
+}
+
 viewer.setCameraChangeHandler(scheduleCameraPreferenceSave);
 
 ui.connect.addEventListener('click', toggleConnection);
@@ -529,7 +563,8 @@ for (const section of [
   ui.connectionSection,
   ui.connectionAdvanced,
   ui.displaySection,
-  ui.displayAdvanced
+  ui.displayAdvanced,
+  ui.visualsSection
 ]) {
   section.addEventListener('toggle', savePreferences);
 }
@@ -719,9 +754,16 @@ ui.downsample.addEventListener('change', () => {
     savePreferences();
   }));
 
+[ui.visualParticles, ui.visualTrails, ui.visualGrid, ui.visualBounds, ui.visualGlow, ui.visualLabels, ui.visualPalette]
+  .forEach((input) => input.addEventListener('change', () => {
+    applyVisualOptions();
+    savePreferences();
+  }));
+
 function syncPreferencesToUi() {
   restorePreferences();
   applyVisibility();
+  applyVisualOptions();
   updateConnectionAdvancedSummary();
   updateDisplaySectionSummary();
   syncPanelCamera(false);
