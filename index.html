@@ -182,13 +182,23 @@
           <div class="toggles">
             <div class="toggle-column">
               <label><input id="visual-enabled" type="checkbox" checked> Data visuals</label>
-              <label><input id="visual-trails" type="checkbox" checked> Motion trails</label>
+              <label><input id="visual-trails" type="checkbox" checked> Point trails</label>
               <label><input id="visual-grid" type="checkbox" checked> Data grid</label>
             </div>
             <div class="toggle-column">
+              <label><input id="visual-fluid" type="checkbox" checked> Fluid field</label>
               <label><input id="visual-glow" type="checkbox" checked> Glow</label>
               <label><input id="visual-labels" type="checkbox" checked> Labels</label>
             </div>
+          </div>
+
+          <div class="visual-palette-field">
+            <label for="visual-fluid-response">Fluid response</label>
+            <select id="visual-fluid-response">
+              <option value="soft">Soft</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="expressive">Expressive</option>
+            </select>
           </div>
 
           <div class="visual-palette-field">

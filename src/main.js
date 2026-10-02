@@ -45,7 +45,7 @@ const ui = {
   displaySection: $('#display-section'), displayAdvanced: $('#display-advanced'), displaySectionSummary: $('#display-section-summary'),
   debugSection: $('#debug-section'), visualsSection: $('#visuals-section'), visualsSectionSummary: $('#visuals-section-summary'), appVersion: $('#app-version'),
   showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors'),
-  visualEnabled: $('#visual-enabled'), visualTrails: $('#visual-trails'), visualGrid: $('#visual-grid'), visualGlow: $('#visual-glow'), visualLabels: $('#visual-labels'), visualPalette: $('#visual-palette')
+  visualEnabled: $('#visual-enabled'), visualTrails: $('#visual-trails'), visualGrid: $('#visual-grid'), visualFluid: $('#visual-fluid'), visualGlow: $('#visual-glow'), visualLabels: $('#visual-labels'), visualFluidResponse: $('#visual-fluid-response'), visualPalette: $('#visual-palette')
 };
 
 ui.appVersion.textContent = `Version ${APP_VERSION}`;
@@ -147,8 +147,10 @@ function savePreferences() {
       enabled: ui.visualEnabled.checked,
       trails: ui.visualTrails.checked,
       grid: ui.visualGrid.checked,
+      fluid: ui.visualFluid.checked,
       glow: ui.visualGlow.checked,
       labels: ui.visualLabels.checked,
+      fluidResponse: ui.visualFluidResponse.value,
       palette: ui.visualPalette.value
     },
     ui: {
@@ -218,8 +220,12 @@ function restorePreferences() {
   if (typeof visualPreferences.enabled === 'boolean') ui.visualEnabled.checked = visualPreferences.enabled;
   if (typeof visualPreferences.trails === 'boolean') ui.visualTrails.checked = visualPreferences.trails;
   if (typeof visualPreferences.grid === 'boolean') ui.visualGrid.checked = visualPreferences.grid;
+  if (typeof visualPreferences.fluid === 'boolean') ui.visualFluid.checked = visualPreferences.fluid;
   if (typeof visualPreferences.glow === 'boolean') ui.visualGlow.checked = visualPreferences.glow;
   if (typeof visualPreferences.labels === 'boolean') ui.visualLabels.checked = visualPreferences.labels;
+  if (typeof visualPreferences.fluidResponse === 'string') {
+    ui.visualFluidResponse.value = visualPreferences.fluidResponse;
+  }
   if (typeof visualPreferences.palette === 'string') ui.visualPalette.value = visualPreferences.palette;
 
   const sidebarWidth = Number(uiPreferences.sidebarWidth);
@@ -551,8 +557,10 @@ function applyVisualOptions() {
     enabled: ui.visualEnabled.checked,
     trails: ui.visualTrails.checked,
     grid: ui.visualGrid.checked,
+    fluid: ui.visualFluid.checked,
     glow: ui.visualGlow.checked,
     labels: ui.visualLabels.checked,
+    fluidResponse: ui.visualFluidResponse.value,
     palette: ui.visualPalette.value
   });
   ui.visualsSectionSummary.textContent =
@@ -773,7 +781,16 @@ ui.downsample.addEventListener('change', () => {
     savePreferences();
   }));
 
-[ui.visualEnabled, ui.visualTrails, ui.visualGrid, ui.visualGlow, ui.visualLabels, ui.visualPalette]
+[
+  ui.visualEnabled,
+  ui.visualTrails,
+  ui.visualGrid,
+  ui.visualFluid,
+  ui.visualGlow,
+  ui.visualLabels,
+  ui.visualFluidResponse,
+  ui.visualPalette
+]
   .forEach((input) => input.addEventListener('change', () => {
     applyVisualOptions();
     savePreferences();
