@@ -42,7 +42,7 @@ copyFileSync(join(root, 'index.html'), join(out, 'index.html'));
 copyFileSync(join(root, 'augmenta-favicon.png'), join(out, 'augmenta-favicon.png'));
 
 for (const name of readdirSync(join(root, 'src'))) {
-  if (!name.endsWith('.js') && name !== 'styles.css') continue;
+  if (!name.endsWith('.js') && name !== 'styles.css' && !name.endsWith('.png')) continue;
   copyFileSync(join(root, 'src', name), join(out, 'src', name));
 }
 
