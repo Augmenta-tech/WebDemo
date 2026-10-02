@@ -129,8 +129,8 @@ export function createFluidField() {
       const x = clamp01(splat.x);
       const y = clamp01(splat.y);
       const radius = Math.max(Number(splat.radius) || 0.0001, 0.00001);
-      const dx = clamp(Number(splat.dx) || 0, -2.5, 2.5);
-      const dy = clamp(Number(splat.dy) || 0, -2.5, 2.5);
+      const dx = clamp(Number(splat.dx) || 0, -2000, 2000);
+      const dy = clamp(Number(splat.dy) || 0, -2000, 2000);
       const color = normalizeColor(splat.color);
       const amount = clamp(Number(splat.amount) || 1, 0, 3);
 
