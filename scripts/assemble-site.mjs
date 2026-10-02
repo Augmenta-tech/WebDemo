@@ -32,6 +32,7 @@ function replaceRequired(source, search, replacement) {
 requirePath(join(root, 'vendor', 'AugmentaClientSDK-JS', 'dist', 'esm'), 'built Augmenta SDK');
 requirePath(join(root, 'vendor', 'qrcode-generator', 'qrcode.js'), 'vendored QR generator');
 requirePath(join(threeRoot, 'build', 'three.module.js'), 'Three.js runtime');
+requirePath(join(root, 'src', 'LDR_LLL1_0.png'), 'fluid dithering texture');
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'src'), { recursive: true });
@@ -42,7 +43,7 @@ copyFileSync(join(root, 'index.html'), join(out, 'index.html'));
 copyFileSync(join(root, 'augmenta-favicon.png'), join(out, 'augmenta-favicon.png'));
 
 for (const name of readdirSync(join(root, 'src'))) {
-  if (!name.endsWith('.js') && name !== 'styles.css') continue;
+  if (!name.endsWith('.js') && name !== 'styles.css' && !name.endsWith('.png')) continue;
   copyFileSync(join(root, 'src', name), join(out, 'src', name));
 }
 

@@ -175,40 +175,15 @@
           <span class="panel-heading-copy">
             <span class="panel-title">Visuals</span>
           </span>
-          <span id="visuals-section-summary" class="panel-summary-value">Punchy</span>
+          <span id="visuals-section-summary" class="panel-summary-value">Fluid</span>
         </summary>
 
         <div class="panel-content">
-          <div class="toggles">
-            <div class="toggle-column">
-              <label><input id="visual-enabled" type="checkbox" checked> Data visuals</label>
-              <label><input id="visual-trails" type="checkbox" checked> Point trails</label>
-              <label><input id="visual-grid" type="checkbox" checked> Data grid</label>
-            </div>
-            <div class="toggle-column">
-              <label><input id="visual-fluid" type="checkbox" checked> Fluid field</label>
-              <label><input id="visual-glow" type="checkbox" checked> Glow</label>
-              <label><input id="visual-labels" type="checkbox" checked> Labels</label>
-            </div>
-          </div>
-
-          <div class="visual-palette-field">
-            <label for="visual-fluid-response">Fluid response</label>
-            <select id="visual-fluid-response">
-              <option value="soft">Soft</option>
-              <option value="balanced" selected>Balanced</option>
-              <option value="expressive">Expressive</option>
-            </select>
-          </div>
-
-          <div class="visual-palette-field">
-            <label for="visual-palette">Palette</label>
-            <select id="visual-palette">
-              <option value="punchy" selected>Punchy</option>
-              <option value="cool">Cool</option>
-              <option value="mono">Monochrome</option>
-            </select>
-          </div>
+          <label class="advanced-toggle">
+            <input id="visual-enabled" type="checkbox" checked>
+            Fluid simulation
+          </label>
+          <p class="hint">PavelDoGreat defaults, driven by subsampled Augmenta point clouds.</p>
         </div>
       </details>
 

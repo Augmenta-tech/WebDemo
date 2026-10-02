@@ -1,619 +1,160 @@
-import { createFluidField } from './fluid.js';
+import { createFluidSimulation } from './fluid.js';
 
-const BACKGROUND = '#090b11';
-const STALE_MS = 360;
-const EASING_MS = 70;
-const MAX_POINTS = 1400;
-const FLUID_POINTS_PER_OBJECT = 32;
-
-const FLUID_RESPONSES = {
-  soft: {
-    dye: 0.065,
-    radius: 0.00007,
-    motion: 720,
-    swirl: 180,
-    opacity: 0.58
-  },
-  balanced: {
-    dye: 0.095,
-    radius: 0.00011,
-    motion: 980,
-    swirl: 260,
-    opacity: 0.74
-  },
-  expressive: {
-    dye: 0.14,
-    radius: 0.00016,
-    motion: 1320,
-    swirl: 360,
-    opacity: 0.88
-  }
+const DEFAULT_SCENE = {
+  minX: -5,
+  maxX: 5,
+  minY: 0,
+  maxY: 4
 };
 
-const PALETTES = {
-  punchy: ['#38e8ff', '#ff4fd8', '#a4ff56', '#ffb02e', '#7f7cff', '#ff5c69'],
-  cool: ['#49ecff', '#4d9cff', '#8c7dff', '#47ffd0', '#84b7ff', '#b58cff'],
-  mono: ['#f4f7ff', '#cfd7e8', '#ffffff', '#aab6cc', '#e8edfa', '#bdc7dc']
-};
+const MAX_TOTAL_EMITTERS = 16;
+const MAX_EMITTERS_PER_CLOUD = 8;
+const MAX_QUEUED_EMITTERS = 32;
+const MAX_POINT_DELTA_UV = 0.08;
+const MIN_POINT_DELTA_UV = 0.00001;
+const COLOR_UPDATE_SPEED = 10;
+const MIN_FRAME_DT = 1 / 120;
+const MAX_FRAME_DT = 1 / 10;
 
 export function createVisuals(host) {
   const canvas = document.createElement('canvas');
-  canvas.className = 'data-visuals';
+  canvas.className = 'data-visuals fluid-visuals';
   canvas.setAttribute('aria-hidden', 'true');
   host.appendChild(canvas);
 
-  const trailCanvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d', { alpha: false });
-  const trail = trailCanvas.getContext('2d');
-  const fluid = safeCreateFluidField();
+  const fluid = safeCreateFluid(canvas);
+  const views = new Map();
 
-  const objects = new Map();
-  let width = 1;
-  let height = 1;
-  let pixelRatio = 1;
-  let rightInset = 0;
-  let lastDraw = performance.now();
-  let scene = defaultScene();
-  let zones = [];
-  let fluidSamplePhase = 0;
-
-  const visibility = {
-    clusters: true,
-    points: true,
-    scene: true,
-    zones: true,
-    vectors: true
-  };
-
-  const options = {
-    enabled: true,
-    trails: true,
-    grid: true,
-    glow: true,
-    labels: true,
-    fluid: true,
-    fluidResponse: 'balanced',
-    palette: 'punchy'
-  };
-
-  function resize() {
-    const rect = host.getBoundingClientRect();
-    width = Math.max(1, Math.round(rect.width));
-    height = Math.max(1, Math.round(rect.height));
-    pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-
-    for (const target of [canvas, trailCanvas]) {
-      target.width = Math.max(1, Math.round(width * pixelRatio));
-      target.height = Math.max(1, Math.round(height * pixelRatio));
-    }
-
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    trail.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    trail.clearRect(0, 0, width, height);
-  }
+  let scene = { ...DEFAULT_SCENE };
+  let pendingEmitters = [];
+  let lastAnimationTime = performance.now();
+  let colorUpdateTimer = 0;
+  let enabled = true;
 
   function renderSetup(root, selectedSceneAddress) {
     const scenes = [];
-    const nextZones = [];
-
     walk(root, (container) => {
       if (container.isScene?.()) scenes.push(container);
-      if (container.isZone?.()) {
-        nextZones.push({
-          name: container.getName?.() || 'Zone',
-          position: vector3(container.getPosition?.(), [0, 0, 0])
-        });
-      }
     });
 
-    const selected = scenes.find((candidate) => (
-      selectedSceneAddress && candidate.getAddress?.() === selectedSceneAddress
-    )) ?? scenes[0];
-
-    scene = selected ? sceneFromContainer(selected) : defaultScene();
-    zones = nextZones;
+    scene = sceneBounds(scenes, selectedSceneAddress);
+    clearTracking();
   }
 
   function renderFrame(frame) {
     const sceneAddress = frame.getSceneInfo?.().getAddress?.() || '';
-    const active = new Set();
     const now = performance.now();
+    const clouds = [];
+    const active = new Set();
 
     frame.getObjects?.().forEach((object, index) => {
+      if (!object.hasPointCloud?.()) return;
+
       const id = object.getID?.();
       const uuid = object.getUUID?.();
       const key = `${sceneAddress}|${uuid || `id:${id ?? index}`}`;
       active.add(key);
 
-      let view = objects.get(key);
+      let view = views.get(key);
       if (!view) {
-        view = createView(key, id, uuid);
-        objects.set(key, view);
+        view = createView(key);
+        views.set(key, view);
       }
 
-      view.id = id;
-      view.uuid = uuid;
-      view.lastSeen = now;
+      const points = object.getPointCloud?.().getPointsData?.();
+      if (!points?.length) return;
 
+      let velocity = [0, 0, 0];
       if (object.hasCluster?.()) {
-        const cluster = object.getCluster();
-        view.centerTarget = vector3(cluster.getBoundingBoxCenter?.(), view.centerTarget);
-        view.sizeTarget = vector3(cluster.getBoundingBoxSize?.(), view.sizeTarget);
-        view.centroidTarget = vector3(cluster.getCentroid?.(), view.centerTarget);
-        view.velocityTarget = vector3(cluster.getVelocity?.(), [0, 0, 0]);
+        velocity = vector3(object.getCluster().getVelocity?.(), velocity);
       }
 
-      if (object.hasPointCloud?.()) {
-        const points = object.getPointCloud().getPointsData?.();
-        if (points?.length) view.points = points;
-      }
+      clouds.push({ view, points, velocity, now });
     });
 
-    for (const [key, view] of objects) {
+    for (const [key] of views) {
       if (key.startsWith(`${sceneAddress}|`) && !active.has(key)) {
-        view.lastSeen = Math.min(view.lastSeen, now - 1);
+        views.delete(key);
       }
     }
-  }
 
-  function createView(key, id, uuid) {
-    return {
-      key,
-      id,
-      uuid,
-      colorIndex: hashString(key) % PALETTES.punchy.length,
-      lastSeen: performance.now(),
-      center: [0, 0.9, 0],
-      centerTarget: [0, 0.9, 0],
-      size: [0.55, 1.7, 0.55],
-      sizeTarget: [0.55, 1.7, 0.55],
-      centroid: [0, 0.9, 0],
-      centroidTarget: [0, 0.9, 0],
-      velocity: [0, 0, 0],
-      velocityTarget: [0, 0, 0],
-      points: undefined
-    };
+    if (!enabled || !clouds.length) return;
+
+    const perCloudBudget = emitterBudget(clouds.length);
+    const emitters = [];
+
+    for (const cloud of clouds) {
+      emitters.push(...emittersForCloud(cloud, perCloudBudget, scene));
+    }
+
+    if (!emitters.length) return;
+
+    pendingEmitters.push(...emitters);
+    if (pendingEmitters.length > MAX_QUEUED_EMITTERS) {
+      pendingEmitters = pendingEmitters.slice(-MAX_QUEUED_EMITTERS);
+    }
   }
 
   function animate(now) {
-    const dt = Math.min(Math.max(now - lastDraw, 0), 50);
-    lastDraw = now;
-    const amount = 1 - Math.exp(-dt / EASING_MS);
+    const dt = Math.min(Math.max((now - lastAnimationTime) / 1000, 0), 1 / 60);
+    lastAnimationTime = now;
 
-    for (const [key, view] of objects) {
-      ease(view.center, view.centerTarget, amount);
-      ease(view.size, view.sizeTarget, amount);
-      ease(view.centroid, view.centroidTarget, amount);
-      ease(view.velocity, view.velocityTarget, amount);
-      if (now - view.lastSeen > STALE_MS) objects.delete(key);
+    updateColors(dt);
+
+    canvas.hidden = !enabled || !fluid.supported;
+    if (enabled && fluid.supported) {
+      const emitters = pendingEmitters;
+      pendingEmitters = [];
+      fluid.update(dt, emitters);
+    } else {
+      pendingEmitters = [];
     }
 
-    canvas.hidden = !options.enabled;
-    if (options.enabled) draw(now, dt / 1000);
     requestAnimationFrame(animate);
   }
 
-  function draw(now, dt) {
-    const projection = makeProjection();
+  function updateColors(dt) {
+    colorUpdateTimer += dt * COLOR_UPDATE_SPEED;
+    if (colorUpdateTimer < 1) return;
 
-    drawBackground(projection, now);
-    if (options.grid) drawGrid(projection, now);
-    if (visibility.scene) drawSceneFrame(projection);
-
-    drawFluid(projection, now, dt);
-    updateTrails(projection);
-    if (options.trails) ctx.drawImage(trailCanvas, 0, 0, width, height);
-
-    const views = [...objects.values()];
-    for (const view of views) drawObject(view, projection, now);
-
-    if (visibility.zones) drawZones(projection);
-    drawHud(projection, views.length);
-  }
-
-  function drawBackground(projection, now) {
-    ctx.fillStyle = BACKGROUND;
-    ctx.fillRect(0, 0, width, height);
-
-    const radial = ctx.createRadialGradient(
-      projection.centerX,
-      projection.top + projection.stageHeight * 0.55,
-      0,
-      projection.centerX,
-      projection.top + projection.stageHeight * 0.55,
-      Math.max(projection.stageWidth, projection.stageHeight) * 0.85
-    );
-    radial.addColorStop(0, 'rgba(46, 59, 97, .24)');
-    radial.addColorStop(.55, 'rgba(22, 28, 48, .09)');
-    radial.addColorStop(1, 'rgba(9, 11, 17, 0)');
-    ctx.fillStyle = radial;
-    ctx.fillRect(0, 0, projection.usableWidth, height);
-
-    drawFloorWaves(projection, now);
-  }
-
-  function drawFloorWaves(p, now) {
-    const palette = currentPalette();
-    const startY = p.bottom - p.stageHeight * 0.18;
-
-    ctx.save();
-    ctx.lineWidth = 1;
-
-    for (let row = 0; row < 12; row++) {
-      const t = row / 11;
-      const y = startY + t * (p.bottom - startY);
-      ctx.strokeStyle = colorAlpha(palette[row % palette.length], 0.035 + t * 0.055);
-      ctx.beginPath();
-
-      for (let column = 0; column <= 56; column++) {
-        const x = p.left + (column / 56) * p.stageWidth;
-        const wave = Math.sin(column * .58 + row * .72 + now * .0012) * (1.2 + t * 3.2);
-        if (column === 0) ctx.moveTo(x, y + wave);
-        else ctx.lineTo(x, y + wave);
+    colorUpdateTimer %= 1;
+    for (const view of views.values()) {
+      for (let index = 0; index < view.colors.length; index++) {
+        view.colors[index] = generateColor();
       }
-      ctx.stroke();
     }
-
-    ctx.restore();
-  }
-
-  function drawGrid(p) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(155, 177, 222, .10)';
-    ctx.lineWidth = 1;
-
-    for (let i = 0; i <= 12; i++) {
-      const x = p.left + p.stageWidth * (i / 12);
-      segment(ctx, x, p.top, x, p.bottom);
-    }
-
-    for (let i = 0; i <= 8; i++) {
-      const y = p.top + p.stageHeight * (i / 8);
-      segment(ctx, p.left, y, p.right, y);
-    }
-
-    ctx.restore();
-  }
-
-  function drawSceneFrame(p) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(220, 230, 255, .26)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([7, 8]);
-    ctx.strokeRect(p.left, p.top, p.stageWidth, p.stageHeight);
-    ctx.setLineDash([]);
-
-    const corner = 16;
-    ctx.strokeStyle = 'rgba(233, 240, 255, .72)';
-    ctx.lineWidth = 1.4;
-    cornerMark(ctx, p.left, p.top, 1, 1, corner);
-    cornerMark(ctx, p.right, p.top, -1, 1, corner);
-    cornerMark(ctx, p.left, p.bottom, 1, -1, corner);
-    cornerMark(ctx, p.right, p.bottom, -1, -1, corner);
-    ctx.restore();
-  }
-
-  function drawFluid(p, now, dt) {
-    if (!options.fluid || !visibility.points || !fluid.supported) return;
-
-    const response = FLUID_RESPONSES[options.fluidResponse]
-      || FLUID_RESPONSES.balanced;
-    const splats = collectFluidSplats(p, now, response);
-
-    fluid.update(width, height, pixelRatio, dt, splats, { glow: options.glow });
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = response.opacity;
-    ctx.drawImage(fluid.canvas, 0, 0, width, height);
-    ctx.restore();
-  }
-
-  function collectFluidSplats(p, now, response) {
-    const splats = [];
-    const sceneWidth = Math.max(scene.maxX - scene.minX, 0.001);
-    const sceneHeight = Math.max(scene.maxY - scene.minY, 0.001);
-
-    for (const view of objects.values()) {
-      const data = view.points;
-      if (!data?.length) continue;
-
-      const color = hexToRgb01(objectColor(view));
-      const pointCount = Math.floor(data.length / 3);
-      const sampleCount = Math.min(FLUID_POINTS_PER_OBJECT, pointCount);
-      const step = pointCount / Math.max(sampleCount, 1);
-      const centroidX = p.x(view.centroid[0]) / Math.max(width, 1);
-      const centroidY = 1 - p.y(view.centroid[1]) / Math.max(height, 1);
-      const baseDx = (Number(view.velocity[0]) || 0) / sceneWidth * response.motion;
-      const baseDy = (Number(view.velocity[1]) || 0) / sceneHeight * response.motion;
-
-      for (let sample = 0; sample < sampleCount; sample++) {
-        const pointIndex = Math.floor(
-          (sample * step + fluidSamplePhase * 0.37) % pointCount
-        );
-        const offset = pointIndex * 3;
-        const screenX = p.x(data[offset]);
-        const screenY = p.y(data[offset + 1]);
-
-        if (
-          screenX < p.left
-          || screenX > p.right
-          || screenY < p.top
-          || screenY > p.bottom
-        ) {
-          continue;
-        }
-
-        const x = screenX / Math.max(width, 1);
-        const y = 1 - screenY / Math.max(height, 1);
-        const rx = x - centroidX;
-        const ry = y - centroidY;
-        const pulse = Math.sin(now * 0.0014 + pointIndex * 0.41) * 8;
-
-        splats.push({
-          x,
-          y,
-          dx: baseDx - ry * response.swirl + pulse,
-          dy: baseDy + rx * response.swirl - pulse * 0.35,
-          color,
-          radius: response.radius,
-          amount: response.dye
-        });
-      }
-
-      splats.push({
-        x: centroidX,
-        y: centroidY,
-        dx: baseDx * 1.35,
-        dy: baseDy * 1.35,
-        color,
-        radius: response.radius * 4.8,
-        amount: response.dye * 0.32
-      });
-    }
-
-    fluidSamplePhase = (fluidSamplePhase + 1) % 4096;
-    return splats;
-  }
-
-  function updateTrails(p) {
-    trail.save();
-    trail.globalCompositeOperation = 'destination-out';
-    trail.fillStyle = options.trails ? 'rgba(0, 0, 0, .09)' : 'rgba(0, 0, 0, 1)';
-    trail.fillRect(0, 0, width, height);
-    trail.restore();
-
-    if (!options.trails || !visibility.points) return;
-
-    trail.save();
-    trail.globalCompositeOperation = 'lighter';
-    for (const view of objects.values()) {
-      if (!view.points?.length) continue;
-      drawPointCloud(trail, view, p, .10, 1.15, false);
-    }
-    trail.restore();
-  }
-
-  function drawObject(view, p, now) {
-    const fade = Math.min(1, Math.max(0, (STALE_MS - (now - view.lastSeen)) / 120));
-    const color = objectColor(view);
-
-    if (visibility.points && view.points?.length) {
-      drawPointCloud(ctx, view, p, .88 * fade, options.glow ? 1.75 : 1.4, options.glow);
-    }
-
-    if (visibility.clusters) drawBounds(view, p, color, fade);
-    if (visibility.vectors) drawVelocity(view, p, color, fade);
-  }
-
-  function drawPointCloud(target, view, p, alpha, radius, glow) {
-    const data = view.points;
-    if (!data?.length) return;
-
-    const color = objectColor(view);
-    const pointCount = Math.floor(data.length / 3);
-    const stride = Math.max(1, Math.ceil(pointCount / MAX_POINTS)) * 3;
-
-    target.save();
-    target.fillStyle = colorAlpha(color, alpha);
-    if (glow) {
-      target.shadowColor = color;
-      target.shadowBlur = 8;
-    }
-
-    for (let i = 0; i + 1 < data.length; i += stride) {
-      const x = p.x(data[i]);
-      const y = p.y(data[i + 1]);
-      if (x < p.left || x > p.right || y < p.top || y > p.bottom) continue;
-      target.fillRect(x - radius * .5, y - radius * .5, radius, radius);
-    }
-
-    target.restore();
-  }
-
-  function drawBounds(view, p, color, alpha) {
-    const centerX = p.x(view.center[0]);
-    const centerY = p.y(view.center[1]);
-    const boxWidth = Math.max(Math.abs(view.size[0]) * p.scaleX, 12);
-    const boxHeight = Math.max(Math.abs(view.size[1]) * p.scaleY, 20);
-    const x = centerX - boxWidth * .5;
-    const y = centerY - boxHeight * .5;
-
-    ctx.save();
-    ctx.strokeStyle = colorAlpha(color, .78 * alpha);
-    ctx.lineWidth = 1.2;
-
-    if (options.glow) {
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 10;
-    }
-
-    ctx.strokeRect(x, y, boxWidth, boxHeight);
-
-    const corner = Math.min(14, Math.max(7, Math.min(boxWidth, boxHeight) * .13));
-    ctx.lineWidth = 2.1;
-    cornerMark(ctx, x, y, 1, 1, corner);
-    cornerMark(ctx, x + boxWidth, y, -1, 1, corner);
-    cornerMark(ctx, x, y + boxHeight, 1, -1, corner);
-    cornerMark(ctx, x + boxWidth, y + boxHeight, -1, -1, corner);
-
-    const cx = p.x(view.centroid[0]);
-    const cy = p.y(view.centroid[1]);
-    ctx.fillStyle = colorAlpha(color, .9 * alpha);
-    ctx.beginPath();
-    ctx.arc(cx, cy, 2.4, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (options.labels) drawLabel(view, x, y, color, alpha);
-    ctx.restore();
-  }
-
-  function drawLabel(view, x, y, color, alpha) {
-    const id = view.id !== undefined ? `ID ${view.id}` : view.uuid?.slice(0, 8) || 'OBJECT';
-    ctx.shadowBlur = 0;
-    ctx.font = '600 9px Inter, ui-sans-serif, system-ui, sans-serif';
-    ctx.fillStyle = colorAlpha(color, .92 * alpha);
-    ctx.fillText(id, x, Math.max(16, y - 8));
-
-    ctx.font = '500 8px Inter, ui-sans-serif, system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(205, 216, 240, .48)';
-    ctx.fillText(
-      `X ${view.center[0].toFixed(2)}   Y ${view.center[1].toFixed(2)}`,
-      x,
-      Math.max(26, y + 5)
-    );
-  }
-
-  function drawVelocity(view, p, color, alpha) {
-    const vx = Number(view.velocity[0]) || 0;
-    const vy = Number(view.velocity[1]) || 0;
-    const speed = Math.hypot(vx, vy);
-    if (speed < .01) return;
-
-    const x = p.x(view.centroid[0]);
-    const y = p.y(view.centroid[1]);
-    const length = Math.min(58, 12 + speed * 30);
-    const nx = vx / speed;
-    const ny = -vy / speed;
-
-    ctx.save();
-    ctx.strokeStyle = colorAlpha(color, .55 * alpha);
-    ctx.fillStyle = colorAlpha(color, .55 * alpha);
-    ctx.lineWidth = 1.1;
-    segment(ctx, x, y, x + nx * length, y + ny * length);
-
-    ctx.translate(x + nx * length, y + ny * length);
-    ctx.rotate(Math.atan2(ny, nx));
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-6, -3);
-    ctx.lineTo(-6, 3);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawZones(p) {
-    if (!zones.length) return;
-
-    ctx.save();
-    ctx.font = '500 8px Inter, ui-sans-serif, system-ui, sans-serif';
-
-    for (const zone of zones.slice(0, 12)) {
-      const x = p.x(zone.position[0]);
-      if (x < p.left || x > p.right) continue;
-      ctx.strokeStyle = 'rgba(191, 166, 255, .40)';
-      segment(ctx, x, p.bottom - 8, x, p.bottom + 8);
-      ctx.fillStyle = 'rgba(191, 166, 255, .55)';
-      ctx.fillText(zone.name, x + 5, p.bottom - 10);
-    }
-
-    ctx.restore();
-  }
-
-  function drawHud(p, count) {
-    ctx.save();
-    ctx.font = '600 9px Inter, ui-sans-serif, system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(230, 237, 252, .74)';
-
-    const dimensions = scene.size.map((value) => Number(value).toFixed(1)).join(' × ');
-    ctx.fillText(`DIMENSIONS  ${dimensions} m`, 24, 28);
-    ctx.fillText(`PEOPLE  ${count}`, 24, 43);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(193, 207, 235, .46)';
-    ctx.fillText('AUGMENTA / LIVE DATA', p.right, 28);
-    ctx.restore();
-  }
-
-  function makeProjection() {
-    const usableWidth = Math.max(180, width - rightInset);
-    const left = Math.max(40, usableWidth * .075);
-    const right = usableWidth - Math.max(40, usableWidth * .075);
-    const top = Math.max(72, height * .12);
-    const bottom = height - Math.max(48, height * .09);
-    const stageWidth = Math.max(1, right - left);
-    const stageHeight = Math.max(1, bottom - top);
-
-    return {
-      usableWidth,
-      left,
-      right,
-      top,
-      bottom,
-      stageWidth,
-      stageHeight,
-      centerX: (left + right) * .5,
-      scaleX: stageWidth / Math.max(scene.maxX - scene.minX, .001),
-      scaleY: stageHeight / Math.max(scene.maxY - scene.minY, .001),
-      x: (value) => left + ((value - scene.minX) / Math.max(scene.maxX - scene.minX, .001)) * stageWidth,
-      y: (value) => bottom - ((value - scene.minY) / Math.max(scene.maxY - scene.minY, .001)) * stageHeight
-    };
-  }
-
-  function currentPalette() {
-    return PALETTES[options.palette] || PALETTES.punchy;
-  }
-
-  function objectColor(view) {
-    const palette = currentPalette();
-    return palette[view.colorIndex % palette.length];
-  }
-
-  function setVisibility(next) {
-    Object.assign(visibility, next);
-  }
-
-  function setOptions(next) {
-    const fluidWasEnabled = options.fluid;
-    Object.assign(options, next);
-    if (!options.trails) trail.clearRect(0, 0, width, height);
-    if (fluidWasEnabled && !options.fluid) fluid.clear();
   }
 
   function clearTracking() {
-    objects.clear();
-    trail.clearRect(0, 0, width, height);
+    views.clear();
+    pendingEmitters = [];
     fluid.clear();
   }
 
   function clearSetup() {
-    scene = defaultScene();
-    zones = [];
-    fluid.clear();
+    scene = { ...DEFAULT_SCENE };
+    clearTracking();
   }
 
   function reset() {
-    trail.clearRect(0, 0, width, height);
+    pendingEmitters = [];
+    for (const view of views.values()) view.previousSamples = [];
     fluid.clear();
   }
 
-  function setRightInset(value) {
-    rightInset = Math.max(0, Number(value) || 0);
+  function setOptions(next) {
+    if (typeof next?.enabled !== 'boolean') return;
+
+    const wasEnabled = enabled;
+    enabled = next.enabled;
+    if (wasEnabled !== enabled) reset();
   }
 
-  new ResizeObserver(resize).observe(host);
-  resize();
+  // Kept for compatibility with the Three.js-based application shell.
+  // Fluid input always comes from point clouds regardless of 3D display toggles.
+  function setVisibility() {}
+  function setRightInset() {}
+
   requestAnimationFrame(animate);
 
   return {
@@ -628,27 +169,187 @@ export function createVisuals(host) {
   };
 }
 
-function sceneFromContainer(container) {
-  const position = vector3(container.getPosition?.(), [0, 0, 0]);
-  const size = vector3(container.getSceneParameters?.()?.size, [10, 4, 8]);
-
+function createView(key) {
   return {
-    minX: position[0],
-    maxX: position[0] + Math.max(Math.abs(size[0]), .001),
-    minY: position[1],
-    maxY: position[1] + Math.max(Math.abs(size[1]), .001),
-    size
+    key,
+    colors: [],
+    previousSamples: [],
+    lastFrameTime: undefined
   };
 }
 
-function defaultScene() {
-  return {
-    minX: -5,
-    maxX: 5,
-    minY: 0,
-    maxY: 4,
-    size: [10, 4, 8]
+function emittersForCloud({ view, points, velocity, now }, sampleCount, bounds) {
+  const pointCount = Math.floor(points.length / 3);
+  const indices = selectEmitterIndices(pointCount, sampleCount);
+  const frameDt = view.lastFrameTime === undefined
+    ? 1 / 30
+    : clamp((now - view.lastFrameTime) / 1000, MIN_FRAME_DT, MAX_FRAME_DT);
+  view.lastFrameTime = now;
+
+  while (view.colors.length < indices.length) view.colors.push(generateColor());
+  view.colors.length = indices.length;
+
+  const sceneWidth = Math.max(bounds.maxX - bounds.minX, 0.0001);
+  const sceneHeight = Math.max(bounds.maxY - bounds.minY, 0.0001);
+  const fallbackDelta = {
+    x: (Number(velocity[0]) || 0) * frameDt / sceneWidth,
+    y: (Number(velocity[1]) || 0) * frameDt / sceneHeight
   };
+
+  const nextSamples = [];
+  const emitters = [];
+
+  indices.forEach((pointIndex, slot) => {
+    const offset = pointIndex * 3;
+    const uv = projectPointToUv(
+      [points[offset], points[offset + 1], points[offset + 2]],
+      bounds
+    );
+    nextSamples[slot] = uv;
+
+    if (!uv || !insideUnitSquare(uv)) return;
+
+    const previous = view.previousSamples[slot];
+    let dx = fallbackDelta.x;
+    let dy = fallbackDelta.y;
+
+    if (previous) {
+      const pointDx = uv.x - previous.x;
+      const pointDy = uv.y - previous.y;
+      const pointDistance = Math.hypot(pointDx, pointDy);
+
+      if (pointDistance <= MAX_POINT_DELTA_UV) {
+        dx = pointDx;
+        dy = pointDy;
+      }
+    }
+
+    if (Math.hypot(dx, dy) <= MIN_POINT_DELTA_UV) return;
+
+    emitters.push({
+      x: uv.x,
+      y: uv.y,
+      dx,
+      dy,
+      color: view.colors[slot]
+    });
+  });
+
+  view.previousSamples = nextSamples;
+  return emitters;
+}
+
+export function emitterBudget(cloudCount) {
+  const count = Math.max(1, Number(cloudCount) || 1);
+  return Math.max(
+    1,
+    Math.min(MAX_EMITTERS_PER_CLOUD, Math.floor(MAX_TOTAL_EMITTERS / count))
+  );
+}
+
+export function selectEmitterIndices(pointCount, sampleCount) {
+  const count = Math.max(0, Math.floor(Number(pointCount) || 0));
+  const samples = Math.min(count, Math.max(0, Math.floor(Number(sampleCount) || 0)));
+  if (!count || !samples) return [];
+
+  return Array.from({ length: samples }, (_, index) => (
+    Math.min(
+      count - 1,
+      Math.floor(((index + 0.5) / samples) * count)
+    )
+  ));
+}
+
+export function projectPointToUv(point, bounds) {
+  if (!point || point.length < 2) return undefined;
+
+  const x = Number(point[0]);
+  const y = Number(point[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+
+  const width = Math.max(bounds.maxX - bounds.minX, 0.0001);
+  const height = Math.max(bounds.maxY - bounds.minY, 0.0001);
+
+  return {
+    x: (x - bounds.minX) / width,
+    y: (y - bounds.minY) / height
+  };
+}
+
+function sceneBounds(scenes, selectedSceneAddress) {
+  const selected = selectedSceneAddress
+    ? scenes.find((candidate) => candidate.getAddress?.() === selectedSceneAddress)
+    : undefined;
+
+  if (selected) return boundsForScene(selected);
+  if (!scenes.length) return { ...DEFAULT_SCENE };
+
+  return scenes
+    .map(boundsForScene)
+    .reduce((combined, current) => ({
+      minX: Math.min(combined.minX, current.minX),
+      maxX: Math.max(combined.maxX, current.maxX),
+      minY: Math.min(combined.minY, current.minY),
+      maxY: Math.max(combined.maxY, current.maxY)
+    }));
+}
+
+function boundsForScene(container) {
+  const position = vector3(container.getPosition?.(), [0, 0, 0]);
+  const size = vector3(container.getSceneParameters?.()?.size, [10, 4, 8]);
+
+  const x2 = position[0] + size[0];
+  const y2 = position[1] + size[1];
+
+  return {
+    minX: Math.min(position[0], x2),
+    maxX: Math.max(position[0], x2),
+    minY: Math.min(position[1], y2),
+    maxY: Math.max(position[1], y2)
+  };
+}
+
+function generateColor() {
+  const color = hsvToRgb(Math.random(), 1, 1);
+  return {
+    r: color.r * 0.15,
+    g: color.g * 0.15,
+    b: color.b * 0.15
+  };
+}
+
+function hsvToRgb(h, s, v) {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+
+  switch (i % 6) {
+    case 0: return { r: v, g: t, b: p };
+    case 1: return { r: q, g: v, b: p };
+    case 2: return { r: p, g: v, b: t };
+    case 3: return { r: p, g: q, b: v };
+    case 4: return { r: t, g: p, b: v };
+    default: return { r: v, g: p, b: q };
+  }
+}
+
+function safeCreateFluid(canvas) {
+  try {
+    return createFluidSimulation(canvas);
+  } catch (error) {
+    console.warn('Fluid simulation unavailable:', error);
+    return {
+      supported: false,
+      clear() {},
+      update() {}
+    };
+  }
+}
+
+function insideUnitSquare(point) {
+  return point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1;
 }
 
 function walk(container, visit) {
@@ -664,59 +365,6 @@ function vector3(value, fallback) {
   ));
 }
 
-function ease(current, target, amount) {
-  for (let i = 0; i < current.length; i++) current[i] += (target[i] - current[i]) * amount;
-}
-
-function hashString(value) {
-  let hash = 2166136261;
-  for (const char of String(value)) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function segment(context, x1, y1, x2, y2) {
-  context.beginPath();
-  context.moveTo(x1, y1);
-  context.lineTo(x2, y2);
-  context.stroke();
-}
-
-function cornerMark(context, x, y, sx, sy, length) {
-  segment(context, x, y, x + sx * length, y);
-  segment(context, x, y, x, y + sy * length);
-}
-
-function colorAlpha(hex, alpha) {
-  const value = hex.replace('#', '');
-  const r = Number.parseInt(value.slice(0, 2), 16);
-  const g = Number.parseInt(value.slice(2, 4), 16);
-  const b = Number.parseInt(value.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
-}
-
-
-function safeCreateFluidField() {
-  try {
-    return createFluidField();
-  } catch (error) {
-    console.warn('Fluid visuals unavailable:', error);
-    return {
-      canvas: document.createElement('canvas'),
-      supported: false,
-      clear() {},
-      update() {}
-    };
-  }
-}
-
-function hexToRgb01(hex) {
-  const value = String(hex).replace('#', '');
-  return [
-    Number.parseInt(value.slice(0, 2), 16) / 255,
-    Number.parseInt(value.slice(2, 4), 16) / 255,
-    Number.parseInt(value.slice(4, 6), 16) / 255
-  ];
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }

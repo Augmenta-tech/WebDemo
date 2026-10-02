@@ -54,6 +54,10 @@ button, input, select { font: inherit; }
   pointer-events: none;
 }
 
+#canvas-host .fluid-visuals {
+  background: #000;
+}
+
 .viewer-overlay {
   position: absolute;
   top: 0;
@@ -871,15 +875,3 @@ button.subtle-button.active {
   }
 }
 
-
-.visual-palette-field {
-  display: grid;
-  gap: 6px;
-  margin-top: 14px;
-}
-
-.visual-palette-field label {
-  color: #aeb6c5;
-  font-size: 11px;
-  font-weight: 600;
-}
