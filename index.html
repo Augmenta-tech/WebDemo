@@ -8,8 +8,8 @@
   <link rel="icon" type="image/png" href="./augmenta-favicon.png?v=4">
   <link rel="shortcut icon" type="image/png" href="./augmenta-favicon.png?v=4">
   <link rel="apple-touch-icon" href="./augmenta-favicon.png?v=4">
-  <title>Augmenta × Three.js Debug Viewer</title>
-  <meta name="description" content="Three.js example and debug viewer for the Augmenta JavaScript SDK.">
+  <title>Augmenta Web Demo</title>
+  <meta name="description" content="Interactive real-time spatial data demo powered by Augmenta.">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <style>
     html, body, #app, #viewer { background: #0c0f14; }
@@ -28,12 +28,12 @@
 </head>
 <body style="background:#0c0f14">
   <main id="app" style="background:#0c0f14">
-    <section id="viewer" aria-label="Augmenta 3D viewer" style="background:#0c0f14">
+    <section id="viewer" aria-label="Augmenta Web Demo" style="background:#0c0f14">
       <div id="canvas-host"></div>
       <div class="viewer-overlay">
         <div class="viewer-title">
-          <h1>Augmenta × Three.js</h1>
-          <p>Real-time tracking debug viewer</p>
+          <h1>Augmenta Web Demo</h1>
+          <p>Real-time spatial interaction</p>
         </div>
       </div>
 
@@ -169,6 +169,39 @@
         </div>
       </details>
 
+      <details id="visuals-section" class="panel-section" open>
+        <summary class="section-summary">
+          <span class="section-chevron" aria-hidden="true"></span>
+          <span class="panel-heading-copy">
+            <span class="panel-title">Visuals</span>
+          </span>
+          <span id="visuals-section-summary" class="panel-summary-value">Punchy</span>
+        </summary>
+
+        <div class="panel-content">
+          <div class="toggles">
+            <div class="toggle-column">
+              <label><input id="visual-enabled" type="checkbox" checked> Data visuals</label>
+              <label><input id="visual-trails" type="checkbox" checked> Motion trails</label>
+              <label><input id="visual-grid" type="checkbox" checked> Data grid</label>
+            </div>
+            <div class="toggle-column">
+              <label><input id="visual-glow" type="checkbox" checked> Glow</label>
+              <label><input id="visual-labels" type="checkbox" checked> Labels</label>
+            </div>
+          </div>
+
+          <div class="visual-palette-field">
+            <label for="visual-palette">Palette</label>
+            <select id="visual-palette">
+              <option value="punchy" selected>Punchy</option>
+              <option value="cool">Cool</option>
+              <option value="mono">Monochrome</option>
+            </select>
+          </div>
+        </div>
+      </details>
+
       <details id="debug-section" class="panel-section debug-panel" open>
         <summary class="section-summary">
           <span class="section-chevron" aria-hidden="true"></span>
@@ -191,8 +224,8 @@
 
       <footer class="sidebar-footer">
         <div class="sidebar-footer-app">
-          <div class="sidebar-footer-title">Augmenta × Three.js</div>
-          <div class="sidebar-footer-subtitle">Real-time tracking debug viewer</div>
+          <div class="sidebar-footer-title">Augmenta Web Demo</div>
+          <div class="sidebar-footer-subtitle">Real-time spatial interaction</div>
         </div>
         <div class="sidebar-footer-meta">
           <a
