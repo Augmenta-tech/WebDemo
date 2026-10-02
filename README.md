@@ -24,9 +24,13 @@ demo, except the Capture section:
 - bloom enabled/intensity/threshold
 - sunrays enabled/weight
 
-The preset system currently ships with **Default**, which is the current
-reference configuration. Any manual change is shown as **Custom**; additional
-named presets can be added later without changing the control flow.
+The preset system ships with **Default**, which is the current reference
+configuration. Any manual change is shown as **Custom**.
+
+Named presets can be saved from the Visuals panel and loaded again from the
+preset selector. Saved presets use the app's existing local persistence object,
+so they stay in the current browser alongside the other Web Demo preferences.
+Saved presets can also be deleted locally.
 
 ### Augmenta splat input
 
@@ -45,7 +49,8 @@ as a fallback when point correspondence is not stable.
 ## Augmenta data
 
 The former Display section and Live debug data section are combined as
-**Augmenta data**.
+**Augmenta data**, placed before Visuals so tracking/debug controls remain the
+first data-oriented section after Connection.
 
 Scene selection and the Clusters, Point clouds, Scenes, Zones, and Velocity
 vectors toggles use the original Three.js example renderer. Enabled overlays are
@@ -71,3 +76,8 @@ an Augmenta server.
 
 GitHub Pages is deployed from `main` by
 `.github/workflows/pages.yml`.
+
+## Branding
+
+The app uses the same `augmenta-favicon.png` asset as the Augmenta Three.js
+example for browser icons and the sidebar footer.
