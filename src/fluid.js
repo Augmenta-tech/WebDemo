@@ -36,6 +36,7 @@ const DYE_DISSIPATION = 0.82;
 const CURL_STRENGTH = 22;
 const MAX_DT = 1 / 60;
 const MAX_SPLATS_PER_FRAME = 96;
+const MAX_FALLBACK_SPLATS_PER_FRAME = 24;
 const MAX_DISPLAY_EDGE_PX = 1280;
 
 export function createFluidField() {
@@ -57,7 +58,8 @@ export function createFluidField() {
     formatRG,
     formatR,
     textureType,
-    linearFiltering
+    linearFiltering,
+    floatBlend
   } = state;
 
   const quad = createFullscreenQuad(gl);
@@ -123,19 +125,51 @@ export function createFluidField() {
 
   function applySplats(splats) {
     if (!splats.length) return;
-    splatBatch.draw(
-      splats.map((splat) => ({
-        x: clamp01(splat.x),
-        y: clamp01(splat.y),
-        dx: clamp(Number(splat.dx) || 0, -2000, 2000),
-        dy: clamp(Number(splat.dy) || 0, -2000, 2000),
-        color: normalizeColor(splat.color),
-        radius: Math.max(Number(splat.radius) || 0.0001, 0.00001),
-        amount: clamp(Number(splat.amount) || 1, 0, 3)
-      })),
-      buffers.velocity.read,
-      buffers.dye.read
+
+    const normalized = splats.map((splat) => ({
+      x: clamp01(splat.x),
+      y: clamp01(splat.y),
+      dx: clamp(Number(splat.dx) || 0, -2000, 2000),
+      dy: clamp(Number(splat.dy) || 0, -2000, 2000),
+      color: normalizeColor(splat.color),
+      radius: Math.max(Number(splat.radius) || 0.0001, 0.00001),
+      amount: clamp(Number(splat.amount) || 1, 0, 3)
+    }));
+
+    if (floatBlend) {
+      splatBatch.draw(normalized, buffers.velocity.read, buffers.dye.read);
+      return;
+    }
+
+    const stride = Math.max(
+      1,
+      Math.ceil(normalized.length / MAX_FALLBACK_SPLATS_PER_FRAME)
     );
+    for (let i = 0; i < normalized.length; i += stride) {
+      applySequentialSplat(normalized[i]);
+    }
+  }
+
+  function applySequentialSplat(splat) {
+    programs.splat.use();
+    gl.uniform1f(programs.splat.uniforms.aspectRatio, aspectRatio);
+    gl.uniform2f(programs.splat.uniforms.point, splat.x, splat.y);
+    gl.uniform1f(programs.splat.uniforms.radius, splat.radius);
+
+    gl.uniform1i(programs.splat.uniforms.uTarget, buffers.velocity.read.attach(0));
+    gl.uniform3f(programs.splat.uniforms.color, splat.dx, splat.dy, 0);
+    quad.blit(buffers.velocity.write);
+    buffers.velocity.swap();
+
+    gl.uniform1i(programs.splat.uniforms.uTarget, buffers.dye.read.attach(0));
+    gl.uniform3f(
+      programs.splat.uniforms.color,
+      splat.color[0] * splat.amount,
+      splat.color[1] * splat.amount,
+      splat.color[2] * splat.amount
+    );
+    quad.blit(buffers.dye.write);
+    buffers.dye.swap();
   }
 
   function simulate(dt) {
@@ -269,6 +303,7 @@ function createState(canvas) {
 
   gl.getExtension('EXT_color_buffer_float');
   const linearFiltering = Boolean(gl.getExtension('OES_texture_float_linear'));
+  const floatBlend = Boolean(gl.getExtension('EXT_float_blend'));
   const textureType = gl.HALF_FLOAT;
 
   const formatRGBA = supportedFormat(gl, gl.RGBA16F, gl.RGBA, textureType);
@@ -286,7 +321,8 @@ function createState(canvas) {
     formatRG,
     formatR,
     textureType,
-    linearFiltering
+    linearFiltering,
+    floatBlend
   };
 }
 
@@ -322,6 +358,7 @@ function supportedFormat(gl, internalFormat, format, type) {
 function createPrograms(gl) {
   return {
     clear: createProgram(gl, BASE_VERTEX, CLEAR_FRAGMENT),
+    splat: createProgram(gl, BASE_VERTEX, SPLAT_FRAGMENT),
     inject: createProgram(gl, POINT_VERTEX, POINT_FRAGMENT),
     advection: createProgram(gl, BASE_VERTEX, ADVECTION_FRAGMENT),
     divergence: createProgram(gl, BASE_VERTEX, DIVERGENCE_FRAGMENT),
