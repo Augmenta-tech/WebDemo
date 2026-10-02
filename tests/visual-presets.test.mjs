@@ -33,6 +33,7 @@ test('saved presets get stable local IDs and replace same-name presets', () => {
 test('saved presets normalize malformed persisted data', () => {
   const normalized = normalizeUserPresets([
     { id: 'bad-id', label: '  Saved  ', options: { pressure: 0.5 } },
+    { id: 'user:saved-copy', label: 'saved', options: { pressure: 1 } },
     { id: 'user:saved', label: '', options: { pressure: 1 } },
     null,
     { id: 'user:other', label: 'Other', options: null }
