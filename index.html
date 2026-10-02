@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en" style="background:#0c0f14;color-scheme:dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c0f14">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" type="image/png" href="./augmenta-favicon.png?v=4">
+  <link rel="shortcut icon" type="image/png" href="./augmenta-favicon.png?v=4">
+  <link rel="apple-touch-icon" href="./augmenta-favicon.png?v=4">
+  <title>Augmenta × Three.js Debug Viewer</title>
+  <meta name="description" content="Three.js example and debug viewer for the Augmenta JavaScript SDK.">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <style>
+    html, body, #app, #viewer { background: #0c0f14; }
+  </style>
+  <link rel="stylesheet" href="./src/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+      "augmenta-client-sdk": "./vendor/AugmentaClientSDK-JS/dist/esm/index.js"
+    }
+  }
+  </script>
+  <link rel="modulepreload" href="./src/qr.js">
+</head>
+<body style="background:#0c0f14">
+  <main id="app" style="background:#0c0f14">
+    <section id="viewer" aria-label="Augmenta 3D viewer" style="background:#0c0f14">
+      <div id="canvas-host"></div>
+      <div class="viewer-overlay">
+        <div class="viewer-title">
+          <h1>Augmenta × Three.js</h1>
+          <p>Real-time tracking debug viewer</p>
+        </div>
+      </div>
+
+      <div class="connection-qr-visibility">
+        <a
+          id="connection-qr"
+          class="connection-qr"
+          href="#"
+          hidden
+          aria-label="Copy link with the same Augmenta connection settings"
+        >
+          <span id="connection-qr-code" class="connection-qr-code" style="background:#fff" aria-hidden="true"></span>
+          <span id="connection-qr-label" class="connection-qr-label">Launch it</span>
+        </a>
+      </div>
+    </section>
+
+    <button
+      id="sidebar-toggle"
+      class="sidebar-toggle"
+      type="button"
+      aria-expanded="true"
+      aria-controls="sidebar"
+      title="Hide panel"
+    >&gt;</button>
+
+    <div
+      id="sidebar-resizer"
+      class="sidebar-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize debug panel"
+      aria-valuemin="320"
+      aria-valuemax="450"
+      aria-valuenow="430"
+      tabindex="0"
+      title="Drag to resize panel"
+    ></div>
+
+    <aside id="sidebar">
+      <details id="connection-section" class="panel panel-section connection-panel" open>
+        <summary class="section-summary">
+          <span class="section-chevron" aria-hidden="true"></span>
+          <span class="panel-heading-copy">
+            <span class="panel-title">Connection</span>
+            <span class="panel-subtitle">Augmenta WebSocket Output</span>
+          </span>
+          <span id="status" class="status idle">Idle</span>
+        </summary>
+
+        <div class="panel-content">
+          <div class="server-address-field">
+            <label for="server-address">Augmenta Server Address</label>
+            <input id="server-address" type="text" value="127.0.0.1" spellcheck="false" autocomplete="off" placeholder="192.168.1.42 or augmenta-WA12031.local">
+            <p class="field-subtitle">IP address or hostname</p>
+          </div>
+
+          <div class="button-row">
+            <button id="connect" class="primary" aria-pressed="false">Connect</button>
+            <button id="demo" class="subtle-button" aria-pressed="false">Simulate data</button>
+          </div>
+
+          <p id="connection-note" class="hint connection-log">Connect retries every second until stopped. Auto protocol matches the server version; maximum debug stream stays enabled.</p>
+
+          <details id="connection-advanced" class="advanced-panel">
+            <summary>
+              <span class="advanced-label">Advanced</span>
+              <span id="connection-advanced-summary" class="advanced-summary-value">6060 · Auto · ×1</span>
+            </summary>
+            <div class="advanced-content">
+              <div class="advanced-grid connection-advanced-grid">
+                <div>
+                  <label for="port">Port</label>
+                  <input id="port" type="number" min="1" max="65535" step="1" value="6060" inputmode="numeric">
+                </div>
+                <div>
+                  <label for="protocol">Protocol</label>
+                  <select id="protocol">
+                    <option value="auto" selected>Auto — newest supported</option>
+                    <option value="3">V3 — UUID + timestamps</option>
+                    <option value="2">V2 — legacy IDs</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="downsample">Point downsample</label>
+                  <input id="downsample" type="number" min="1" step="1" value="1">
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="display-section" class="panel panel-section display-panel" open>
+        <summary class="section-summary">
+          <span class="section-chevron" aria-hidden="true"></span>
+          <span class="panel-heading-copy">
+            <span class="panel-title">Display</span>
+          </span>
+          <span id="display-section-summary" class="panel-summary-value">All scenes</span>
+        </summary>
+
+        <div class="panel-content">
+          <div class="display-scenes">
+            <div class="field-heading">
+              <label for="scenes">Scenes</label>
+              <button id="reset-camera" class="text-action" type="button">Reset camera</button>
+            </div>
+            <select id="scenes" disabled>
+              <option value="all">All scenes</option>
+            </select>
+          </div>
+          <div class="toggles">
+            <div class="toggle-column">
+              <label><input id="show-clusters" type="checkbox" checked> Clusters</label>
+              <label><input id="show-points" type="checkbox" checked> Point clouds</label>
+            </div>
+            <div class="toggle-column">
+              <label><input id="show-scene" type="checkbox" checked> Scenes</label>
+              <label><input id="show-zones" type="checkbox" checked> Zones</label>
+            </div>
+          </div>
+
+          <details id="display-advanced" class="advanced-panel">
+            <summary>
+              <span class="advanced-label">Advanced</span>
+              <span class="advanced-summary-value">View helpers</span>
+            </summary>
+            <div class="advanced-content">
+              <label class="advanced-toggle"><input id="show-vectors" type="checkbox" checked> Velocity vectors</label>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="debug-section" class="panel panel-section debug-panel" open>
+        <summary class="section-summary">
+          <span class="section-chevron" aria-hidden="true"></span>
+          <span class="panel-heading-copy">
+            <span class="panel-title">Live debug data</span>
+          </span>
+          <span id="summary" class="panel-summary-value">No data yet</span>
+        </summary>
+
+        <div class="panel-content">
+          <div class="panel-actions">
+            <button id="clear" class="text-action" type="button">Clear data</button>
+          </div>
+
+          <div id="debug-content" class="debug-content">
+            <div class="empty-state">Connect to Augmenta or run the demo to inspect the stream.</div>
+          </div>
+        </div>
+      </details>
+
+      <footer class="sidebar-footer">
+        <div class="sidebar-footer-app">
+          <div class="sidebar-footer-title">Augmenta × Three.js</div>
+          <div class="sidebar-footer-subtitle">Real-time tracking debug viewer</div>
+        </div>
+        <div class="sidebar-footer-meta">
+          <a
+            class="sidebar-footer-link"
+            href="https://augmenta.tech"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Visit the Augmenta website"
+          >
+            <img src="./augmenta-favicon.png?v=4" alt="" width="16" height="16">
+            <span>augmenta.tech</span>
+          </a>
+          <span id="app-version">Version —</span>
+        </div>
+      </footer>
+    </aside>
+  </main>
+
+  <script type="module" src="./src/qr.js"></script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
