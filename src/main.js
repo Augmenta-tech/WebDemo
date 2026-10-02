@@ -2,6 +2,7 @@ import { APP_VERSION } from './app-info.js';
 import { createConnectionController } from './connection.js';
 import { createSetupStore } from './setup-store.js';
 import { createViewer } from './viewer.js';
+import { createVisuals } from './visuals.js';
 import { createDebugPanel } from './debug.js';
 import { makeDemoFrame, makeDemoSetup } from './demo.js';
 import {
@@ -22,7 +23,7 @@ const SIDEBAR_VIEWPORT_MARGIN = 160;
 const SIDEBAR_RESIZE_STEP_PX = 16;
 const SIDEBAR_RESIZE_LARGE_STEP_PX = 40;
 const MOBILE_MEDIA_QUERY = '(max-width: 900px), (pointer: coarse) and (max-width: 1100px)';
-const SETTINGS_STORAGE_KEY = 'augmenta-threejs-settings:v1';
+const SETTINGS_STORAGE_KEY = 'augmenta-webdemo-settings:v1';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -42,13 +43,15 @@ const ui = {
   sidebarToggle: $('#sidebar-toggle'), viewerTitle: $('.viewer-title'), connectionQrVisibility: $('.connection-qr-visibility'),
   connectionSection: $('#connection-section'), connectionAdvanced: $('#connection-advanced'), connectionAdvancedSummary: $('#connection-advanced-summary'),
   displaySection: $('#display-section'), displayAdvanced: $('#display-advanced'), displaySectionSummary: $('#display-section-summary'),
-  debugSection: $('#debug-section'), appVersion: $('#app-version'),
-  showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors')
+  debugSection: $('#debug-section'), visualsSection: $('#visuals-section'), visualsSectionSummary: $('#visuals-section-summary'), appVersion: $('#app-version'),
+  showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors'),
+  visualEnabled: $('#visual-enabled'), visualTrails: $('#visual-trails'), visualGrid: $('#visual-grid'), visualGlow: $('#visual-glow'), visualLabels: $('#visual-labels'), visualPalette: $('#visual-palette')
 };
 
 ui.appVersion.textContent = `Version ${APP_VERSION}`;
 
 const viewer = createViewer($('#canvas-host'));
+const visuals = createVisuals($('#canvas-host'));
 const debug = createDebugPanel(ui.summary, ui.debug);
 
 let disconnectCleanupTimer;
@@ -140,6 +143,14 @@ function savePreferences() {
       vectors: ui.showVectors.checked,
       scene: preferredSceneAddress
     },
+    visuals: {
+      enabled: ui.visualEnabled.checked,
+      trails: ui.visualTrails.checked,
+      grid: ui.visualGrid.checked,
+      glow: ui.visualGlow.checked,
+      labels: ui.visualLabels.checked,
+      palette: ui.visualPalette.value
+    },
     ui: {
       sidebarHidden: ui.app.classList.contains('sidebar-hidden'),
       sidebarWidth: Number.isFinite(sidebarWidth) ? sidebarWidth : SIDEBAR_MAX_WIDTH,
@@ -149,6 +160,7 @@ function savePreferences() {
         connectionAdvanced: ui.connectionAdvanced.open,
         display: ui.displaySection.open,
         displayAdvanced: ui.displayAdvanced.open,
+        visuals: ui.visualsSection.open,
         debug: ui.debugSection.open
       }
     }
@@ -180,6 +192,7 @@ function restorePreferences() {
   const connection = isObject(savedPreferences.connection) ? savedPreferences.connection : {};
   const sharedConnection = readConnectionOptionsFromUrl(window.location.href);
   const display = isObject(savedPreferences.display) ? savedPreferences.display : {};
+  const visualPreferences = isObject(savedPreferences.visuals) ? savedPreferences.visuals : {};
   const uiPreferences = isObject(savedPreferences.ui) ? savedPreferences.ui : {};
   const sectionPreferences = isObject(uiPreferences.sections) ? uiPreferences.sections : {};
 
@@ -202,6 +215,13 @@ function restorePreferences() {
   if (typeof display.vectors === 'boolean') ui.showVectors.checked = display.vectors;
   if (typeof display.scene === 'string' && display.scene) preferredSceneAddress = display.scene;
 
+  if (typeof visualPreferences.enabled === 'boolean') ui.visualEnabled.checked = visualPreferences.enabled;
+  if (typeof visualPreferences.trails === 'boolean') ui.visualTrails.checked = visualPreferences.trails;
+  if (typeof visualPreferences.grid === 'boolean') ui.visualGrid.checked = visualPreferences.grid;
+  if (typeof visualPreferences.glow === 'boolean') ui.visualGlow.checked = visualPreferences.glow;
+  if (typeof visualPreferences.labels === 'boolean') ui.visualLabels.checked = visualPreferences.labels;
+  if (typeof visualPreferences.palette === 'string') ui.visualPalette.value = visualPreferences.palette;
+
   const sidebarWidth = Number(uiPreferences.sidebarWidth);
   if (Number.isFinite(sidebarWidth)) setSidebarWidth(sidebarWidth);
   setSidebarHidden(uiPreferences.sidebarHidden === true, false);
@@ -211,6 +231,7 @@ function restorePreferences() {
     ['connectionAdvanced', ui.connectionAdvanced],
     ['display', ui.displaySection],
     ['displayAdvanced', ui.displayAdvanced],
+    ['visuals', ui.visualsSection],
     ['debug', ui.debugSection]
   ]) {
     if (typeof sectionPreferences[key] === 'boolean') {
@@ -291,6 +312,7 @@ function trackFrame(frame) {
   frameTimes.push(now);
   frameTimes = frameTimes.filter((time) => time >= now - FPS_WINDOW_MS);
   viewer.renderFrame(frame);
+  visuals.renderFrame(frame);
   renderDebug();
 }
 
@@ -324,6 +346,7 @@ function stopSimulation() {
 
 function clearTracking() {
   viewer.clearTracking();
+  visuals.clearTracking();
   lastFrame = undefined;
   frameTimes = [];
 }
@@ -421,7 +444,9 @@ function renderSelectedScenes() {
   if (!root) return;
   clearTracking();
   debug.clear();
-  viewer.renderSetup(root, selectedScene()?.getAddress());
+  const selectedSceneAddress = selectedScene()?.getAddress();
+  viewer.renderSetup(root, selectedSceneAddress);
+  visuals.renderSetup(root, selectedSceneAddress);
 }
 
 function applySetupUpdate(container) {
@@ -429,7 +454,9 @@ function applySetupUpdate(container) {
   if (!root) return;
 
   syncSceneSelector();
-  viewer.renderSetup(root, selectedScene()?.getAddress());
+  const selectedSceneAddress = selectedScene()?.getAddress();
+  viewer.renderSetup(root, selectedSceneAddress);
+  visuals.renderSetup(root, selectedSceneAddress);
   renderDebug(true);
 }
 
@@ -483,6 +510,7 @@ function startSimulation() {
   stopConnection();
   clearTracking();
   viewer.clearSetup();
+  visuals.clearSetup();
   setStatus('Simulating', 'demo');
   ui.note.textContent = 'Local synthetic stream using the Augmenta SDK data model. Click Simulating to stop.';
   lastControl = makeDemoSetup();
@@ -507,13 +535,30 @@ function toggleSimulation() {
 }
 
 function applyVisibility() {
-  viewer.setVisibility({
+  const visibility = {
     clusters: ui.showClusters.checked,
     points: ui.showPoints.checked,
     scene: ui.showScene.checked,
     zones: ui.showZones.checked,
     vectors: ui.showVectors.checked
+  };
+  viewer.setVisibility(visibility);
+  visuals.setVisibility(visibility);
+}
+
+function applyVisualOptions() {
+  visuals.setOptions({
+    enabled: ui.visualEnabled.checked,
+    trails: ui.visualTrails.checked,
+    grid: ui.visualGrid.checked,
+    glow: ui.visualGlow.checked,
+    labels: ui.visualLabels.checked,
+    palette: ui.visualPalette.value
   });
+  ui.visualsSectionSummary.textContent =
+    ui.visualEnabled.checked
+      ? ui.visualPalette.selectedOptions[0]?.textContent ?? 'Punchy'
+      : 'Off';
 }
 
 viewer.setCameraChangeHandler(scheduleCameraPreferenceSave);
@@ -521,7 +566,10 @@ viewer.setCameraChangeHandler(scheduleCameraPreferenceSave);
 ui.connect.addEventListener('click', toggleConnection);
 ui.demo.addEventListener('click', toggleSimulation);
 ui.clear.addEventListener('click', () => clearDebugData(true));
-ui.resetCamera.addEventListener('click', viewer.resetCamera);
+ui.resetCamera.addEventListener('click', () => {
+  viewer.resetCamera();
+  visuals.reset();
+});
 ui.scenes.addEventListener('change', () => {
   preferredSceneAddress = ui.scenes.value;
   updateDisplaySectionSummary();
@@ -533,7 +581,8 @@ for (const section of [
   ui.connectionSection,
   ui.connectionAdvanced,
   ui.displaySection,
-  ui.displayAdvanced
+  ui.displayAdvanced,
+  ui.visualsSection
 ]) {
   section.addEventListener('toggle', savePreferences);
 }
@@ -549,6 +598,7 @@ function syncPanelCamera(animate = false) {
   const hidden = ui.app.classList.contains('sidebar-hidden');
   const inset = isMobileLayout() || hidden ? 0 : ui.sidebar.getBoundingClientRect().width;
   viewer.setRightInset(inset, animate);
+  visuals.setRightInset(inset);
 }
 
 function isMobileLayout() {
@@ -723,9 +773,16 @@ ui.downsample.addEventListener('change', () => {
     savePreferences();
   }));
 
+[ui.visualEnabled, ui.visualTrails, ui.visualGrid, ui.visualGlow, ui.visualLabels, ui.visualPalette]
+  .forEach((input) => input.addEventListener('change', () => {
+    applyVisualOptions();
+    savePreferences();
+  }));
+
 function syncPreferencesToUi() {
   restorePreferences();
   applyVisibility();
+  applyVisualOptions();
   updateConnectionAdvancedSummary();
   updateDisplaySectionSummary();
   syncPanelCamera(false);
