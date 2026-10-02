@@ -18,14 +18,17 @@ The default visual mode is a front-facing technical/data-art view with:
 - colored point-cloud silhouettes
 - tracked bounding boxes and centroids
 - velocity cues
-- motion trails
+- point-cloud-driven GPU fluid field and motion trails
 - scene grid and frame
 - zone markers
 - glow and labels
 - Punchy, Cool, and Monochrome palettes
 
 The visual layer is implemented in `src/visuals.js` and does not replace the
-reference Three.js renderer in `src/viewer.js`.
+reference Three.js renderer in `src/viewer.js`. Its optional fluid field lives
+in `src/fluid.js`: current point-cloud samples continuously seed dye and velocity,
+so the recognizable point silhouette stays sharp while color flows around and
+behind it.
 
 ## Run
 
