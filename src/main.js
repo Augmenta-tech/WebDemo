@@ -42,10 +42,20 @@ const ui = {
   debug: $('#debug-content'), clear: $('#clear'), resetCamera: $('#reset-camera'), scenes: $('#scenes'),
   sidebarToggle: $('#sidebar-toggle'), viewerTitle: $('.viewer-title'), connectionQrVisibility: $('.connection-qr-visibility'),
   connectionSection: $('#connection-section'), connectionAdvanced: $('#connection-advanced'), connectionAdvancedSummary: $('#connection-advanced-summary'),
-  displaySection: $('#display-section'), displayAdvanced: $('#display-advanced'), displaySectionSummary: $('#display-section-summary'),
   debugSection: $('#debug-section'), visualsSection: $('#visuals-section'), visualsSectionSummary: $('#visuals-section-summary'), appVersion: $('#app-version'),
   showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors'),
-  visualEnabled: $('#visual-enabled')
+  visualPreset: $('#visual-preset'), visualEnabled: $('#visual-enabled'),
+  visualDyeResolution: $('#visual-dye-resolution'), visualSimResolution: $('#visual-sim-resolution'),
+  visualDensityDissipation: $('#visual-density-dissipation'), visualDensityDissipationValue: $('#visual-density-dissipation-value'),
+  visualVelocityDissipation: $('#visual-velocity-dissipation'), visualVelocityDissipationValue: $('#visual-velocity-dissipation-value'),
+  visualPressure: $('#visual-pressure'), visualPressureValue: $('#visual-pressure-value'),
+  visualCurl: $('#visual-curl'), visualCurlValue: $('#visual-curl-value'),
+  visualSplatRadius: $('#visual-splat-radius'), visualSplatRadiusValue: $('#visual-splat-radius-value'),
+  visualShading: $('#visual-shading'), visualColorful: $('#visual-colorful'), visualPaused: $('#visual-paused'),
+  visualBloom: $('#visual-bloom'), visualBloomIntensity: $('#visual-bloom-intensity'), visualBloomIntensityValue: $('#visual-bloom-intensity-value'),
+  visualBloomThreshold: $('#visual-bloom-threshold'), visualBloomThresholdValue: $('#visual-bloom-threshold-value'),
+  visualSunrays: $('#visual-sunrays'), visualSunraysWeight: $('#visual-sunrays-weight'), visualSunraysWeightValue: $('#visual-sunrays-weight-value'),
+  visualRandomSplats: $('#visual-random-splats'), visualSplatInput: $('#visual-splat-input'), visualSplatInputSummary: $('#visual-splat-input-summary')
 };
 
 ui.appVersion.textContent = `Version ${APP_VERSION}`;
@@ -53,6 +63,10 @@ ui.appVersion.textContent = `Version ${APP_VERSION}`;
 const viewer = createViewer($('#canvas-host'));
 const visuals = createVisuals($('#canvas-host'));
 const debug = createDebugPanel(ui.summary, ui.debug);
+const visualPresets = visuals.getPresets();
+const defaultVisualPreset = visuals.getPreset('default').options;
+
+populateVisualPresetOptions();
 
 let disconnectCleanupTimer;
 let cameraPreferenceSaveTimer;
@@ -135,7 +149,7 @@ function savePreferences() {
 
   const value = {
     connection: localConnectionPreferences,
-    display: {
+    data: {
       clusters: ui.showClusters.checked,
       points: ui.showPoints.checked,
       sceneBounds: ui.showScene.checked,
@@ -143,9 +157,7 @@ function savePreferences() {
       vectors: ui.showVectors.checked,
       scene: preferredSceneAddress
     },
-    visuals: {
-      enabled: ui.visualEnabled.checked
-    },
+    visuals: visualSettingsFromUi(),
     ui: {
       sidebarHidden: ui.app.classList.contains('sidebar-hidden'),
       sidebarWidth: Number.isFinite(sidebarWidth) ? sidebarWidth : SIDEBAR_MAX_WIDTH,
@@ -153,10 +165,8 @@ function savePreferences() {
       sections: {
         connection: ui.connectionSection.open,
         connectionAdvanced: ui.connectionAdvanced.open,
-        display: ui.displaySection.open,
-        displayAdvanced: ui.displayAdvanced.open,
         visuals: ui.visualsSection.open,
-        debug: ui.debugSection.open
+        data: ui.debugSection.open
       }
     }
   };
@@ -186,7 +196,11 @@ function restorePreferences() {
   const savedPreferences = loadPreferences();
   const connection = isObject(savedPreferences.connection) ? savedPreferences.connection : {};
   const sharedConnection = readConnectionOptionsFromUrl(window.location.href);
-  const display = isObject(savedPreferences.display) ? savedPreferences.display : {};
+  const dataPreferences = isObject(savedPreferences.data)
+    ? savedPreferences.data
+    : isObject(savedPreferences.display)
+      ? savedPreferences.display
+      : {};
   const visualPreferences = isObject(savedPreferences.visuals) ? savedPreferences.visuals : {};
   const uiPreferences = isObject(savedPreferences.ui) ? savedPreferences.ui : {};
   const sectionPreferences = isObject(uiPreferences.sections) ? uiPreferences.sections : {};
@@ -198,37 +212,37 @@ function restorePreferences() {
   localConnectionPreferences = normalizeConnectionOptions(getConnectionSettings());
   applyConnectionSettings(resolveConnectionOptions(localConnectionPreferences, sharedConnection));
 
-  if (typeof display.clusters === 'boolean') ui.showClusters.checked = display.clusters;
-  if (typeof display.points === 'boolean') ui.showPoints.checked = display.points;
-  if (typeof display.sceneBounds === 'boolean') {
-    ui.showScene.checked = display.sceneBounds;
-  } else if (typeof display.zones === 'boolean') {
+  if (typeof dataPreferences.clusters === 'boolean') ui.showClusters.checked = dataPreferences.clusters;
+  if (typeof dataPreferences.points === 'boolean') ui.showPoints.checked = dataPreferences.points;
+  if (typeof dataPreferences.sceneBounds === 'boolean') {
+    ui.showScene.checked = dataPreferences.sceneBounds;
+  } else if (typeof dataPreferences.zones === 'boolean') {
     // Backward compatibility with the previous combined "Scene & zones" toggle.
-    ui.showScene.checked = display.zones;
+    ui.showScene.checked = dataPreferences.zones;
   }
-  if (typeof display.zones === 'boolean') ui.showZones.checked = display.zones;
-  if (typeof display.vectors === 'boolean') ui.showVectors.checked = display.vectors;
-  if (typeof display.scene === 'string' && display.scene) preferredSceneAddress = display.scene;
+  if (typeof dataPreferences.zones === 'boolean') ui.showZones.checked = dataPreferences.zones;
+  if (typeof dataPreferences.vectors === 'boolean') ui.showVectors.checked = dataPreferences.vectors;
+  if (typeof dataPreferences.scene === 'string' && dataPreferences.scene) {
+    preferredSceneAddress = dataPreferences.scene;
+  }
 
-  if (typeof visualPreferences.enabled === 'boolean') {
-    ui.visualEnabled.checked = visualPreferences.enabled;
-  }
+  writeVisualSettings({
+    ...defaultVisualPreset,
+    ...visualPreferences
+  });
 
   const sidebarWidth = Number(uiPreferences.sidebarWidth);
   if (Number.isFinite(sidebarWidth)) setSidebarWidth(sidebarWidth);
   setSidebarHidden(uiPreferences.sidebarHidden === true, false);
 
-  for (const [key, element] of [
+  for (const [key, element, legacyKey] of [
     ['connection', ui.connectionSection],
     ['connectionAdvanced', ui.connectionAdvanced],
-    ['display', ui.displaySection],
-    ['displayAdvanced', ui.displayAdvanced],
     ['visuals', ui.visualsSection],
-    ['debug', ui.debugSection]
+    ['data', ui.debugSection, 'debug']
   ]) {
-    if (typeof sectionPreferences[key] === 'boolean') {
-      element.open = sectionPreferences[key];
-    }
+    const saved = sectionPreferences[key] ?? sectionPreferences[legacyKey];
+    if (typeof saved === 'boolean') element.open = saved;
   }
 
   viewer.setCameraView(uiPreferences.cameraView);
@@ -393,10 +407,7 @@ function zoneNameForAddress(address) {
   return parts.at(-1) || address || '—';
 }
 
-function updateDisplaySectionSummary() {
-  ui.displaySectionSummary.textContent = ui.scenes.selectedOptions[0]?.textContent
-    ?? (ui.scenes.disabled ? 'No scenes' : 'All scenes');
-}
+
 
 function updateConnectionAdvancedSummary() {
   const protocolLabel = ui.protocol.selectedOptions[0]?.textContent?.split(' — ')[0]
@@ -422,7 +433,6 @@ function syncSceneSelector() {
     || scenes.some((scene) => scene.getAddress() === requested);
   ui.scenes.value = stillAvailable ? requested : 'all';
   ui.scenes.disabled = scenes.length === 0;
-  updateDisplaySectionSummary();
 }
 
 function setSetup(root) {
@@ -527,22 +537,118 @@ function toggleSimulation() {
 }
 
 function applyVisibility() {
-  const visibility = {
+  viewer.setVisibility({
     clusters: ui.showClusters.checked,
     points: ui.showPoints.checked,
     scene: ui.showScene.checked,
     zones: ui.showZones.checked,
     vectors: ui.showVectors.checked
+  });
+}
+
+function populateVisualPresetOptions() {
+  ui.visualPreset.innerHTML = [
+    ...visualPresets.map(({ name, label }) => (
+      `<option value="${escapeOption(name)}">${escapeOption(label)}</option>`
+    )),
+    '<option value="custom" hidden disabled>Custom</option>'
+  ].join('');
+}
+
+function visualSettingsFromUi() {
+  return {
+    enabled: ui.visualEnabled.checked,
+    splatInput: ui.visualSplatInput.value,
+    dyeResolution: Number(ui.visualDyeResolution.value),
+    simResolution: Number(ui.visualSimResolution.value),
+    densityDissipation: Number(ui.visualDensityDissipation.value),
+    velocityDissipation: Number(ui.visualVelocityDissipation.value),
+    pressure: Number(ui.visualPressure.value),
+    curl: Number(ui.visualCurl.value),
+    splatRadius: Number(ui.visualSplatRadius.value),
+    shading: ui.visualShading.checked,
+    colorful: ui.visualColorful.checked,
+    paused: ui.visualPaused.checked,
+    bloom: ui.visualBloom.checked,
+    bloomIntensity: Number(ui.visualBloomIntensity.value),
+    bloomThreshold: Number(ui.visualBloomThreshold.value),
+    sunrays: ui.visualSunrays.checked,
+    sunraysWeight: Number(ui.visualSunraysWeight.value)
   };
-  viewer.setVisibility(visibility);
-  visuals.setVisibility(visibility);
+}
+
+function writeVisualSettings(settings) {
+  ui.visualEnabled.checked = settings.enabled;
+  ui.visualSplatInput.value = settings.splatInput;
+  ui.visualDyeResolution.value = String(settings.dyeResolution);
+  ui.visualSimResolution.value = String(settings.simResolution);
+  ui.visualDensityDissipation.value = String(settings.densityDissipation);
+  ui.visualVelocityDissipation.value = String(settings.velocityDissipation);
+  ui.visualPressure.value = String(settings.pressure);
+  ui.visualCurl.value = String(settings.curl);
+  ui.visualSplatRadius.value = String(settings.splatRadius);
+  ui.visualShading.checked = settings.shading;
+  ui.visualColorful.checked = settings.colorful;
+  ui.visualPaused.checked = settings.paused;
+  ui.visualBloom.checked = settings.bloom;
+  ui.visualBloomIntensity.value = String(settings.bloomIntensity);
+  ui.visualBloomThreshold.value = String(settings.bloomThreshold);
+  ui.visualSunrays.checked = settings.sunrays;
+  ui.visualSunraysWeight.value = String(settings.sunraysWeight);
+  updateVisualRangeOutputs();
+}
+
+function updateVisualRangeOutputs() {
+  for (const [input, output] of [
+    [ui.visualDensityDissipation, ui.visualDensityDissipationValue],
+    [ui.visualVelocityDissipation, ui.visualVelocityDissipationValue],
+    [ui.visualPressure, ui.visualPressureValue],
+    [ui.visualCurl, ui.visualCurlValue],
+    [ui.visualSplatRadius, ui.visualSplatRadiusValue],
+    [ui.visualBloomIntensity, ui.visualBloomIntensityValue],
+    [ui.visualBloomThreshold, ui.visualBloomThresholdValue],
+    [ui.visualSunraysWeight, ui.visualSunraysWeightValue]
+  ]) {
+    output.value = input.value;
+    output.textContent = input.value;
+  }
+}
+
+function visualSettingsEqual(left, right) {
+  return Object.keys(defaultVisualPreset).every((key) => {
+    const a = left[key];
+    const b = right[key];
+    return typeof a === 'number' && typeof b === 'number'
+      ? Math.abs(a - b) < 1e-9
+      : a === b;
+  });
+}
+
+function updateVisualPresetState() {
+  const settings = visualSettingsFromUi();
+  const matchedPreset = visualPresets.find(({ name }) => {
+    const preset = visuals.getPreset(name);
+    return preset && visualSettingsEqual(settings, preset.options);
+  });
+  const customOption = ui.visualPreset.querySelector('option[value="custom"]');
+  const isCustom = !matchedPreset;
+
+  customOption.hidden = !isCustom;
+  customOption.disabled = !isCustom;
+  ui.visualPreset.value = matchedPreset?.name ?? 'custom';
+  ui.visualsSectionSummary.textContent = settings.enabled
+    ? (matchedPreset?.label ?? 'Custom')
+    : 'Off';
+
+  ui.visualSplatInputSummary.textContent =
+    ui.visualSplatInput.selectedOptions[0]?.textContent ?? 'Point clouds';
 }
 
 function applyVisualOptions() {
-  visuals.setOptions({ enabled: ui.visualEnabled.checked });
-  ui.visualsSectionSummary.textContent = ui.visualEnabled.checked ? 'Fluid' : 'Off';
+  updateVisualRangeOutputs();
+  visuals.setOptions(visualSettingsFromUi());
+  updateVisualPresetState();
 }
-
 viewer.setCameraChangeHandler(scheduleCameraPreferenceSave);
 
 ui.connect.addEventListener('click', toggleConnection);
@@ -554,7 +660,6 @@ ui.resetCamera.addEventListener('click', () => {
 });
 ui.scenes.addEventListener('change', () => {
   preferredSceneAddress = ui.scenes.value;
-  updateDisplaySectionSummary();
   savePreferences();
   renderSelectedScenes();
 });
@@ -562,8 +667,6 @@ ui.scenes.addEventListener('change', () => {
 for (const section of [
   ui.connectionSection,
   ui.connectionAdvanced,
-  ui.displaySection,
-  ui.displayAdvanced,
   ui.visualsSection
 ]) {
   section.addEventListener('toggle', savePreferences);
@@ -755,17 +858,58 @@ ui.downsample.addEventListener('change', () => {
     savePreferences();
   }));
 
-ui.visualEnabled.addEventListener('change', () => {
+const visualRangeInputs = [
+  ui.visualDensityDissipation,
+  ui.visualVelocityDissipation,
+  ui.visualPressure,
+  ui.visualCurl,
+  ui.visualSplatRadius,
+  ui.visualBloomIntensity,
+  ui.visualBloomThreshold,
+  ui.visualSunraysWeight
+];
+
+const visualChangeInputs = [
+  ui.visualEnabled,
+  ui.visualDyeResolution,
+  ui.visualSimResolution,
+  ui.visualShading,
+  ui.visualColorful,
+  ui.visualPaused,
+  ui.visualBloom,
+  ui.visualSunrays,
+  ui.visualSplatInput
+];
+
+for (const input of visualRangeInputs) {
+  input.addEventListener('input', applyVisualOptions);
+  input.addEventListener('change', savePreferences);
+}
+
+for (const input of visualChangeInputs) {
+  input.addEventListener('change', () => {
+    applyVisualOptions();
+    savePreferences();
+  });
+}
+
+ui.visualPreset.addEventListener('change', () => {
+  const preset = visuals.getPreset(ui.visualPreset.value);
+  if (!preset) return;
+
+  writeVisualSettings(preset.options);
   applyVisualOptions();
   savePreferences();
 });
 
+ui.visualRandomSplats.addEventListener('click', () => {
+  visuals.randomSplats();
+});
 function syncPreferencesToUi() {
   restorePreferences();
   applyVisibility();
   applyVisualOptions();
   updateConnectionAdvancedSummary();
-  updateDisplaySectionSummary();
   syncPanelCamera(false);
   refreshConnectionQr();
 }

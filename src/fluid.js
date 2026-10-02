@@ -70,6 +70,9 @@ if (!gl || !ext.formatRGBA || !ext.formatRG || !ext.formatR) {
         canvas,
         supported: false,
         clear () {},
+        getConfig () { return {}; },
+        randomSplats () {},
+        setConfig () {},
         update () {}
     };
 }
@@ -1021,7 +1024,7 @@ function applyEmitters (emitters) {
         const dx = correctDeltaX(Number(emitter.dx) || 0) * config.SPLAT_FORCE;
         const dy = correctDeltaY(Number(emitter.dy) || 0) * config.SPLAT_FORCE;
         const color = emitter.color || { r: 0, g: 0, b: 0 };
-        splat(x, y, dx, dy, color);
+        splat(x, y, dx, dy, color, emitter.radius);
     }
 }
 
@@ -1226,13 +1229,17 @@ function blur (target, temp, iterations) {
     }
 }
 
-function splat (x, y, dx, dy, color) {
+function splat (x, y, dx, dy, color, radiusOverride) {
+    const splatRadius = Number.isFinite(Number(radiusOverride))
+        ? Number(radiusOverride)
+        : config.SPLAT_RADIUS;
+
     splatProgram.bind();
     gl.uniform1i(splatProgram.uniforms.uTarget, velocity.read.attach(0));
     gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
     gl.uniform2f(splatProgram.uniforms.point, x, y);
     gl.uniform3f(splatProgram.uniforms.color, dx, dy, 0.0);
-    gl.uniform1f(splatProgram.uniforms.radius, correctRadius(config.SPLAT_RADIUS / 100.0));
+    gl.uniform1f(splatProgram.uniforms.radius, correctRadius(splatRadius / 100.0));
     blit(velocity.write);
     velocity.swap();
 
@@ -1312,6 +1319,85 @@ function hashCode (s) {
     return hash;
 };
 
+function setConfig (next = {}) {
+    let reinitialize = false;
+    let updateDisplayKeywords = false;
+
+    for (const [key, rawValue] of Object.entries(next)) {
+        if (!(key in config)) continue;
+
+        const current = config[key];
+        const value = typeof current === 'boolean'
+            ? Boolean(rawValue)
+            : Number(rawValue);
+
+        if (typeof current !== 'boolean' && !Number.isFinite(value)) continue;
+        if (current === value) continue;
+
+        config[key] = value;
+
+        if (key === 'SIM_RESOLUTION' || key === 'DYE_RESOLUTION')
+            reinitialize = true;
+        if (key === 'SHADING' || key === 'BLOOM' || key === 'SUNRAYS')
+            updateDisplayKeywords = true;
+    }
+
+    if (reinitialize)
+        initFramebuffers();
+    if (updateDisplayKeywords)
+        updateKeywords();
+}
+
+function getConfig () {
+    return { ...config };
+}
+
+function randomSplats (amount = parseInt(Math.random() * 20) + 5) {
+    const count = Math.max(0, Math.floor(Number(amount) || 0));
+
+    for (let i = 0; i < count; i++) {
+        const color = generateColor();
+        color.r *= 10.0;
+        color.g *= 10.0;
+        color.b *= 10.0;
+        const x = Math.random();
+        const y = Math.random();
+        const dx = 1000 * (Math.random() - 0.5);
+        const dy = 1000 * (Math.random() - 0.5);
+        splat(x, y, dx, dy, color);
+    }
+
+    render(null);
+}
+
+function generateColor () {
+    let c = HSVtoRGB(Math.random(), 1.0, 1.0);
+    c.r *= 0.15;
+    c.g *= 0.15;
+    c.b *= 0.15;
+    return c;
+}
+
+function HSVtoRGB (h, s, v) {
+    let r, g, b, i, f, p, q, t;
+    i = Math.floor(h * 6);
+    f = h * 6 - i;
+    p = v * (1 - s);
+    q = v * (1 - f * s);
+    t = v * (1 - (1 - f) * s);
+
+    switch (i % 6) {
+        case 0: r = v, g = t, b = p; break;
+        case 1: r = q, g = v, b = p; break;
+        case 2: r = p, g = v, b = t; break;
+        case 3: r = p, g = q, b = v; break;
+        case 4: r = t, g = p, b = v; break;
+        case 5: r = v, g = p, b = q; break;
+    }
+
+    return { r, g, b };
+}
+
 function clear () {
     gl.disable(gl.BLEND);
     const targets = [
@@ -1338,6 +1424,9 @@ return {
     canvas,
     supported: true,
     clear,
+    getConfig,
+    randomSplats,
+    setConfig,
     update
 };
 }

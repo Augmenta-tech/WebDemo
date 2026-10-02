@@ -127,13 +127,171 @@
         </div>
       </details>
 
-      <details id="display-section" class="panel-section" open>
+      <details id="visuals-section" class="panel-section" open>
         <summary class="section-summary">
           <span class="section-chevron" aria-hidden="true"></span>
           <span class="panel-heading-copy">
-            <span class="panel-title">Display</span>
+            <span class="panel-title">Visuals</span>
           </span>
-          <span id="display-section-summary" class="panel-summary-value">All scenes</span>
+          <span id="visuals-section-summary" class="panel-summary-value">Default</span>
+        </summary>
+
+        <div class="panel-content">
+          <div class="visual-preset-field">
+            <label for="visual-preset">Preset</label>
+            <select id="visual-preset">
+              <option value="default" selected>Default</option>
+              <option value="custom" hidden disabled>Custom</option>
+            </select>
+          </div>
+
+          <label class="advanced-toggle visual-master-toggle">
+            <input id="visual-enabled" type="checkbox" checked>
+            Fluid simulation
+          </label>
+
+          <details class="advanced-panel" open>
+            <summary>
+              <span class="advanced-label">Simulation</span>
+              <span class="advanced-summary-value">Pavel defaults</span>
+            </summary>
+            <div class="advanced-content visual-controls">
+              <div class="visual-control-grid">
+                <div>
+                  <label for="visual-dye-resolution">Quality</label>
+                  <select id="visual-dye-resolution">
+                    <option value="1024" selected>High</option>
+                    <option value="512">Medium</option>
+                    <option value="256">Low</option>
+                    <option value="128">Very low</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="visual-sim-resolution">Sim resolution</label>
+                  <select id="visual-sim-resolution">
+                    <option value="32">32</option>
+                    <option value="64">64</option>
+                    <option value="128" selected>128</option>
+                    <option value="256">256</option>
+                  </select>
+                </div>
+              </div>
+
+              <label class="visual-range-control" for="visual-density-dissipation">
+                <span>Density diffusion</span>
+                <output id="visual-density-dissipation-value">1</output>
+                <input id="visual-density-dissipation" type="range" min="0" max="4" step="0.01" value="1">
+              </label>
+
+              <label class="visual-range-control" for="visual-velocity-dissipation">
+                <span>Velocity diffusion</span>
+                <output id="visual-velocity-dissipation-value">0.2</output>
+                <input id="visual-velocity-dissipation" type="range" min="0" max="4" step="0.01" value="0.2">
+              </label>
+
+              <label class="visual-range-control" for="visual-pressure">
+                <span>Pressure</span>
+                <output id="visual-pressure-value">0.8</output>
+                <input id="visual-pressure" type="range" min="0" max="1" step="0.01" value="0.8">
+              </label>
+
+              <label class="visual-range-control" for="visual-curl">
+                <span>Vorticity</span>
+                <output id="visual-curl-value">30</output>
+                <input id="visual-curl" type="range" min="0" max="50" step="1" value="30">
+              </label>
+
+              <label class="visual-range-control" for="visual-splat-radius">
+                <span>Splat radius</span>
+                <output id="visual-splat-radius-value">0.25</output>
+                <input id="visual-splat-radius" type="range" min="0.01" max="1" step="0.01" value="0.25">
+              </label>
+
+              <div class="toggles visual-toggle-grid">
+                <div class="toggle-column">
+                  <label><input id="visual-shading" type="checkbox" checked> Shading</label>
+                  <label><input id="visual-colorful" type="checkbox" checked> Colorful</label>
+                </div>
+                <div class="toggle-column">
+                  <label><input id="visual-paused" type="checkbox"> Paused</label>
+                </div>
+              </div>
+
+              <button id="visual-random-splats" class="subtle-button visual-action-button" type="button">Random splats</button>
+            </div>
+          </details>
+
+          <details class="advanced-panel" open>
+            <summary>
+              <span class="advanced-label">Bloom</span>
+              <span class="advanced-summary-value">0.8</span>
+            </summary>
+            <div class="advanced-content visual-controls">
+              <label class="advanced-toggle">
+                <input id="visual-bloom" type="checkbox" checked>
+                Enabled
+              </label>
+
+              <label class="visual-range-control" for="visual-bloom-intensity">
+                <span>Intensity</span>
+                <output id="visual-bloom-intensity-value">0.8</output>
+                <input id="visual-bloom-intensity" type="range" min="0.1" max="2" step="0.01" value="0.8">
+              </label>
+
+              <label class="visual-range-control" for="visual-bloom-threshold">
+                <span>Threshold</span>
+                <output id="visual-bloom-threshold-value">0.6</output>
+                <input id="visual-bloom-threshold" type="range" min="0" max="1" step="0.01" value="0.6">
+              </label>
+            </div>
+          </details>
+
+          <details class="advanced-panel" open>
+            <summary>
+              <span class="advanced-label">Sunrays</span>
+              <span class="advanced-summary-value">1.0</span>
+            </summary>
+            <div class="advanced-content visual-controls">
+              <label class="advanced-toggle">
+                <input id="visual-sunrays" type="checkbox" checked>
+                Enabled
+              </label>
+
+              <label class="visual-range-control" for="visual-sunrays-weight">
+                <span>Weight</span>
+                <output id="visual-sunrays-weight-value">1</output>
+                <input id="visual-sunrays-weight" type="range" min="0.3" max="1" step="0.01" value="1">
+              </label>
+            </div>
+          </details>
+
+          <details class="advanced-panel" open>
+            <summary>
+              <span class="advanced-label">Augmenta</span>
+              <span id="visual-splat-input-summary" class="advanced-summary-value">Point clouds</span>
+            </summary>
+            <div class="advanced-content">
+              <div>
+                <label for="visual-splat-input">Splat input</label>
+                <select id="visual-splat-input">
+                  <option value="centroid">Centroid</option>
+                  <option value="point-clouds" selected>Point clouds</option>
+                  <option value="bounding-box">Bounding box</option>
+                </select>
+                <p class="field-subtitle">Choose how Augmenta tracking drives fluid splats.</p>
+              </div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details id="debug-section" class="panel-section debug-panel" open>
+        <summary class="section-summary">
+          <span class="section-chevron" aria-hidden="true"></span>
+          <span class="panel-heading-copy">
+            <span class="panel-title">Augmenta data</span>
+          </span>
+          <span id="summary" class="panel-summary-value">No data yet</span>
         </summary>
 
         <div class="panel-content">
@@ -146,10 +304,12 @@
               <option value="all">All scenes</option>
             </select>
           </div>
-          <div class="toggles">
+
+          <div class="toggles data-overlay-controls">
             <div class="toggle-column">
               <label><input id="show-clusters" type="checkbox" checked> Clusters</label>
               <label><input id="show-points" type="checkbox" checked> Point clouds</label>
+              <label><input id="show-vectors" type="checkbox" checked> Velocity vectors</label>
             </div>
             <div class="toggle-column">
               <label><input id="show-scene" type="checkbox" checked> Scenes</label>
@@ -157,47 +317,7 @@
             </div>
           </div>
 
-          <details id="display-advanced" class="advanced-panel">
-            <summary>
-              <span class="advanced-label">Advanced</span>
-              <span class="advanced-summary-value">View helpers</span>
-            </summary>
-            <div class="advanced-content">
-              <label class="advanced-toggle"><input id="show-vectors" type="checkbox" checked> Velocity vectors</label>
-            </div>
-          </details>
-        </div>
-      </details>
-
-      <details id="visuals-section" class="panel-section" open>
-        <summary class="section-summary">
-          <span class="section-chevron" aria-hidden="true"></span>
-          <span class="panel-heading-copy">
-            <span class="panel-title">Visuals</span>
-          </span>
-          <span id="visuals-section-summary" class="panel-summary-value">Fluid</span>
-        </summary>
-
-        <div class="panel-content">
-          <label class="advanced-toggle">
-            <input id="visual-enabled" type="checkbox" checked>
-            Fluid simulation
-          </label>
-          <p class="hint">PavelDoGreat defaults, driven by subsampled Augmenta point clouds.</p>
-        </div>
-      </details>
-
-      <details id="debug-section" class="panel-section debug-panel" open>
-        <summary class="section-summary">
-          <span class="section-chevron" aria-hidden="true"></span>
-          <span class="panel-heading-copy">
-            <span class="panel-title">Live debug data</span>
-          </span>
-          <span id="summary" class="panel-summary-value">No data yet</span>
-        </summary>
-
-        <div class="panel-content">
-          <div class="panel-actions">
+          <div class="panel-actions data-panel-actions">
             <button id="clear" class="text-action" type="button">Clear data</button>
           </div>
 

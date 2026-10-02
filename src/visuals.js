@@ -7,14 +7,54 @@ const DEFAULT_SCENE = {
   maxY: 4
 };
 
+const REFERENCE_DEFAULTS = Object.freeze({
+  enabled: true,
+  splatInput: 'point-clouds',
+  dyeResolution: 1024,
+  simResolution: 128,
+  densityDissipation: 1,
+  velocityDissipation: 0.2,
+  pressure: 0.8,
+  curl: 30,
+  splatRadius: 0.25,
+  shading: true,
+  colorful: true,
+  paused: false,
+  bloom: true,
+  bloomIntensity: 0.8,
+  bloomThreshold: 0.6,
+  sunrays: true,
+  sunraysWeight: 1
+});
+
 const MAX_TOTAL_EMITTERS = 16;
 const MAX_EMITTERS_PER_CLOUD = 8;
 const MAX_QUEUED_EMITTERS = 32;
 const MAX_POINT_DELTA_UV = 0.08;
 const MIN_POINT_DELTA_UV = 0.00001;
-const COLOR_UPDATE_SPEED = 10;
 const MIN_FRAME_DT = 1 / 120;
 const MAX_FRAME_DT = 1 / 10;
+const COLOR_UPDATE_SPEED = 10;
+const BOUNDING_BOX_RADIUS_MIN = 0.01;
+const BOUNDING_BOX_RADIUS_MAX = 1;
+
+const FLUID_CONFIG_KEYS = Object.freeze({
+  dyeResolution: 'DYE_RESOLUTION',
+  simResolution: 'SIM_RESOLUTION',
+  densityDissipation: 'DENSITY_DISSIPATION',
+  velocityDissipation: 'VELOCITY_DISSIPATION',
+  pressure: 'PRESSURE',
+  curl: 'CURL',
+  splatRadius: 'SPLAT_RADIUS',
+  shading: 'SHADING',
+  colorful: 'COLORFUL',
+  paused: 'PAUSED',
+  bloom: 'BLOOM',
+  bloomIntensity: 'BLOOM_INTENSITY',
+  bloomThreshold: 'BLOOM_THRESHOLD',
+  sunrays: 'SUNRAYS',
+  sunraysWeight: 'SUNRAYS_WEIGHT'
+});
 
 export function createVisuals(host) {
   const canvas = document.createElement('canvas');
@@ -24,12 +64,19 @@ export function createVisuals(host) {
 
   const fluid = safeCreateFluid(canvas);
   const views = new Map();
+  const defaultOptions = effectiveDefaults(fluid.getConfig?.());
+  const presets = Object.freeze({
+    default: Object.freeze({
+      label: 'Default',
+      options: Object.freeze({ ...defaultOptions })
+    })
+  });
 
   let scene = { ...DEFAULT_SCENE };
+  let options = { ...defaultOptions };
   let pendingEmitters = [];
   let lastAnimationTime = performance.now();
   let colorUpdateTimer = 0;
-  let enabled = true;
 
   function renderSetup(root, selectedSceneAddress) {
     const scenes = [];
@@ -44,11 +91,13 @@ export function createVisuals(host) {
   function renderFrame(frame) {
     const sceneAddress = frame.getSceneInfo?.().getAddress?.() || '';
     const now = performance.now();
-    const clouds = [];
+    const objects = [];
     const active = new Set();
 
     frame.getObjects?.().forEach((object, index) => {
-      if (!object.hasPointCloud?.()) return;
+      const hasCluster = Boolean(object.hasCluster?.());
+      const hasPointCloud = Boolean(object.hasPointCloud?.());
+      if (!hasCluster && !hasPointCloud) return;
 
       const id = object.getID?.();
       const uuid = object.getUUID?.();
@@ -61,15 +110,18 @@ export function createVisuals(host) {
         views.set(key, view);
       }
 
-      const points = object.getPointCloud?.().getPointsData?.();
-      if (!points?.length) return;
+      const cluster = hasCluster ? object.getCluster() : undefined;
+      const cloud = hasPointCloud ? object.getPointCloud() : undefined;
+      const points = cloud?.getPointsData?.();
 
-      let velocity = [0, 0, 0];
-      if (object.hasCluster?.()) {
-        velocity = vector3(object.getCluster().getVelocity?.(), velocity);
-      }
-
-      clouds.push({ view, points, velocity, now });
+      objects.push({
+        view,
+        points,
+        centroid: cluster ? vector3(cluster.getCentroid?.(), undefined) : undefined,
+        size: cluster ? vector3(cluster.getBoundingBoxSize?.(), undefined) : undefined,
+        velocity: cluster ? vector3(cluster.getVelocity?.(), [0, 0, 0]) : [0, 0, 0],
+        now
+      });
     });
 
     for (const [key] of views) {
@@ -78,15 +130,12 @@ export function createVisuals(host) {
       }
     }
 
-    if (!enabled || !clouds.length) return;
+    if (!options.enabled) return;
 
-    const perCloudBudget = emitterBudget(clouds.length);
-    const emitters = [];
+    const sources = emitterSources(objects, options.splatInput);
+    if (!sources.length) return;
 
-    for (const cloud of clouds) {
-      emitters.push(...emittersForCloud(cloud, perCloudBudget, scene));
-    }
-
+    const emitters = collectEmitters(sources, options.splatInput, scene);
     if (!emitters.length) return;
 
     pendingEmitters.push(...emitters);
@@ -101,8 +150,8 @@ export function createVisuals(host) {
 
     updateColors(dt);
 
-    canvas.hidden = !enabled || !fluid.supported;
-    if (enabled && fluid.supported) {
+    canvas.hidden = !options.enabled || !fluid.supported;
+    if (options.enabled && fluid.supported) {
       const emitters = pendingEmitters;
       pendingEmitters = [];
       fluid.update(dt, emitters);
@@ -114,6 +163,8 @@ export function createVisuals(host) {
   }
 
   function updateColors(dt) {
+    if (!options.colorful) return;
+
     colorUpdateTimer += dt * COLOR_UPDATE_SPEED;
     if (colorUpdateTimer < 1) return;
 
@@ -123,6 +174,41 @@ export function createVisuals(host) {
         view.colors[index] = generateColor();
       }
     }
+  }
+
+  function setOptions(next = {}) {
+    const previousEnabled = options.enabled;
+    const previousInput = options.splatInput;
+
+    options = {
+      ...options,
+      ...pickVisualOptions(next)
+    };
+
+    fluid.setConfig?.(fluidConfigFromOptions(next));
+
+    if (previousInput !== options.splatInput) resetInputTracking();
+    if (previousEnabled !== options.enabled) reset();
+  }
+
+  function getOptions() {
+    return { ...options };
+  }
+
+  function getPreset(name) {
+    const preset = presets[name];
+    return preset ? { label: preset.label, options: { ...preset.options } } : undefined;
+  }
+
+  function getPresets() {
+    return Object.entries(presets).map(([name, preset]) => ({
+      name,
+      label: preset.label
+    }));
+  }
+
+  function randomSplats() {
+    fluid.randomSplats?.();
   }
 
   function clearTracking() {
@@ -136,22 +222,22 @@ export function createVisuals(host) {
     clearTracking();
   }
 
-  function reset() {
+  function resetInputTracking() {
     pendingEmitters = [];
-    for (const view of views.values()) view.previousSamples = [];
+    for (const view of views.values()) {
+      view.previousSamples = [];
+      view.previousCentroid = undefined;
+      view.lastFrameTime = undefined;
+    }
+  }
+
+  function reset() {
+    resetInputTracking();
     fluid.clear();
   }
 
-  function setOptions(next) {
-    if (typeof next?.enabled !== 'boolean') return;
-
-    const wasEnabled = enabled;
-    enabled = next.enabled;
-    if (wasEnabled !== enabled) reset();
-  }
-
   // Kept for compatibility with the Three.js-based application shell.
-  // Fluid input always comes from point clouds regardless of 3D display toggles.
+  // Debug display visibility is handled exclusively by viewer.js.
   function setVisibility() {}
   function setRightInset() {}
 
@@ -160,6 +246,10 @@ export function createVisuals(host) {
   return {
     clearSetup,
     clearTracking,
+    getOptions,
+    getPreset,
+    getPresets,
+    randomSplats,
     renderFrame,
     renderSetup,
     reset,
@@ -174,28 +264,47 @@ function createView(key) {
     key,
     colors: [],
     previousSamples: [],
+    previousCentroid: undefined,
     lastFrameTime: undefined
   };
 }
 
-function emittersForCloud({ view, points, velocity, now }, sampleCount, bounds) {
+function emitterSources(objects, splatInput) {
+  const filtered = objects.filter((object) => {
+    if (splatInput === 'point-clouds') return object.points?.length;
+    return object.centroid && object.size;
+  });
+
+  return filtered.slice(0, MAX_TOTAL_EMITTERS);
+}
+
+function collectEmitters(objects, splatInput, bounds) {
+  if (splatInput === 'point-clouds') {
+    const perCloudBudget = emitterBudget(objects.length);
+    return objects.flatMap((object) => (
+      pointCloudEmitters(object, perCloudBudget, bounds)
+    ));
+  }
+
+  return objects
+    .map((object) => centroidEmitter(
+      object,
+      bounds,
+      splatInput === 'bounding-box'
+        ? boundingBoxSplatRadius(object.size, bounds)
+        : undefined
+    ))
+    .filter(Boolean);
+}
+
+function pointCloudEmitters({ view, points, velocity, now }, sampleCount, bounds) {
   const pointCount = Math.floor(points.length / 3);
   const indices = selectEmitterIndices(pointCount, sampleCount);
-  const frameDt = view.lastFrameTime === undefined
-    ? 1 / 30
-    : clamp((now - view.lastFrameTime) / 1000, MIN_FRAME_DT, MAX_FRAME_DT);
-  view.lastFrameTime = now;
+  const frameDt = frameDelta(view, now);
 
-  while (view.colors.length < indices.length) view.colors.push(generateColor());
-  view.colors.length = indices.length;
+  ensureColors(view, indices.length);
 
-  const sceneWidth = Math.max(bounds.maxX - bounds.minX, 0.0001);
-  const sceneHeight = Math.max(bounds.maxY - bounds.minY, 0.0001);
-  const fallbackDelta = {
-    x: (Number(velocity[0]) || 0) * frameDt / sceneWidth,
-    y: (Number(velocity[1]) || 0) * frameDt / sceneHeight
-  };
-
+  const fallbackDelta = velocityDelta(velocity, frameDt, bounds);
   const nextSamples = [];
   const emitters = [];
 
@@ -209,34 +318,79 @@ function emittersForCloud({ view, points, velocity, now }, sampleCount, bounds) 
 
     if (!uv || !insideUnitSquare(uv)) return;
 
-    const previous = view.previousSamples[slot];
-    let dx = fallbackDelta.x;
-    let dy = fallbackDelta.y;
-
-    if (previous) {
-      const pointDx = uv.x - previous.x;
-      const pointDy = uv.y - previous.y;
-      const pointDistance = Math.hypot(pointDx, pointDy);
-
-      if (pointDistance <= MAX_POINT_DELTA_UV) {
-        dx = pointDx;
-        dy = pointDy;
-      }
-    }
-
-    if (Math.hypot(dx, dy) <= MIN_POINT_DELTA_UV) return;
+    const delta = stableDelta(uv, view.previousSamples[slot], fallbackDelta);
+    if (Math.hypot(delta.x, delta.y) <= MIN_POINT_DELTA_UV) return;
 
     emitters.push({
       x: uv.x,
       y: uv.y,
-      dx,
-      dy,
+      dx: delta.x,
+      dy: delta.y,
       color: view.colors[slot]
     });
   });
 
   view.previousSamples = nextSamples;
   return emitters;
+}
+
+function centroidEmitter({ view, centroid, velocity, now }, bounds, radius) {
+  const uv = projectPointToUv(centroid, bounds);
+  const frameDt = frameDelta(view, now);
+  const fallbackDelta = velocityDelta(velocity, frameDt, bounds);
+
+  if (!uv || !insideUnitSquare(uv)) {
+    view.previousCentroid = uv;
+    return undefined;
+  }
+
+  ensureColors(view, 1);
+  const delta = stableDelta(uv, view.previousCentroid, fallbackDelta);
+  view.previousCentroid = uv;
+
+  if (Math.hypot(delta.x, delta.y) <= MIN_POINT_DELTA_UV) return undefined;
+
+  return {
+    x: uv.x,
+    y: uv.y,
+    dx: delta.x,
+    dy: delta.y,
+    color: view.colors[0],
+    ...(Number.isFinite(radius) ? { radius } : {})
+  };
+}
+
+function frameDelta(view, now) {
+  const dt = view.lastFrameTime === undefined
+    ? 1 / 30
+    : clamp((now - view.lastFrameTime) / 1000, MIN_FRAME_DT, MAX_FRAME_DT);
+  view.lastFrameTime = now;
+  return dt;
+}
+
+function velocityDelta(velocity, dt, bounds) {
+  const width = Math.max(bounds.maxX - bounds.minX, 0.0001);
+  const height = Math.max(bounds.maxY - bounds.minY, 0.0001);
+
+  return {
+    x: (Number(velocity?.[0]) || 0) * dt / width,
+    y: (Number(velocity?.[1]) || 0) * dt / height
+  };
+}
+
+function stableDelta(current, previous, fallback) {
+  if (!previous) return fallback;
+
+  const dx = current.x - previous.x;
+  const dy = current.y - previous.y;
+  if (Math.hypot(dx, dy) <= MAX_POINT_DELTA_UV) return { x: dx, y: dy };
+
+  return fallback;
+}
+
+function ensureColors(view, count) {
+  while (view.colors.length < count) view.colors.push(generateColor());
+  view.colors.length = count;
 }
 
 export function emitterBudget(cloudCount) {
@@ -274,6 +428,77 @@ export function projectPointToUv(point, bounds) {
     x: (x - bounds.minX) / width,
     y: (y - bounds.minY) / height
   };
+}
+
+export function boundingBoxSplatRadius(size, bounds) {
+  if (!size || size.length < 2) return undefined;
+
+  const width = Math.max(bounds.maxX - bounds.minX, 0.0001);
+  const height = Math.max(bounds.maxY - bounds.minY, 0.0001);
+  const widthUv = Math.abs(Number(size[0]) || 0) / width;
+  const heightUv = Math.abs(Number(size[1]) || 0) / height;
+
+  // Pavel's splat radius is the Gaussian squared-distance denominator * 100.
+  // Use an area-equivalent projected radius so a tall human box does not
+  // explode into a full-screen splat while still scaling with box footprint.
+  const radiusUv = 0.5 * Math.sqrt(widthUv * heightUv);
+  return clamp(
+    radiusUv * radiusUv * 100,
+    BOUNDING_BOX_RADIUS_MIN,
+    BOUNDING_BOX_RADIUS_MAX
+  );
+}
+
+function effectiveDefaults(engineConfig = {}) {
+  return {
+    ...REFERENCE_DEFAULTS,
+    dyeResolution: finiteOr(engineConfig.DYE_RESOLUTION, REFERENCE_DEFAULTS.dyeResolution),
+    simResolution: finiteOr(engineConfig.SIM_RESOLUTION, REFERENCE_DEFAULTS.simResolution),
+    densityDissipation: finiteOr(
+      engineConfig.DENSITY_DISSIPATION,
+      REFERENCE_DEFAULTS.densityDissipation
+    ),
+    velocityDissipation: finiteOr(
+      engineConfig.VELOCITY_DISSIPATION,
+      REFERENCE_DEFAULTS.velocityDissipation
+    ),
+    pressure: finiteOr(engineConfig.PRESSURE, REFERENCE_DEFAULTS.pressure),
+    curl: finiteOr(engineConfig.CURL, REFERENCE_DEFAULTS.curl),
+    splatRadius: finiteOr(engineConfig.SPLAT_RADIUS, REFERENCE_DEFAULTS.splatRadius),
+    shading: booleanOr(engineConfig.SHADING, REFERENCE_DEFAULTS.shading),
+    colorful: booleanOr(engineConfig.COLORFUL, REFERENCE_DEFAULTS.colorful),
+    paused: booleanOr(engineConfig.PAUSED, REFERENCE_DEFAULTS.paused),
+    bloom: booleanOr(engineConfig.BLOOM, REFERENCE_DEFAULTS.bloom),
+    bloomIntensity: finiteOr(
+      engineConfig.BLOOM_INTENSITY,
+      REFERENCE_DEFAULTS.bloomIntensity
+    ),
+    bloomThreshold: finiteOr(
+      engineConfig.BLOOM_THRESHOLD,
+      REFERENCE_DEFAULTS.bloomThreshold
+    ),
+    sunrays: booleanOr(engineConfig.SUNRAYS, REFERENCE_DEFAULTS.sunrays),
+    sunraysWeight: finiteOr(
+      engineConfig.SUNRAYS_WEIGHT,
+      REFERENCE_DEFAULTS.sunraysWeight
+    )
+  };
+}
+
+function pickVisualOptions(value) {
+  const result = {};
+  for (const key of Object.keys(REFERENCE_DEFAULTS)) {
+    if (key in value) result[key] = value[key];
+  }
+  return result;
+}
+
+function fluidConfigFromOptions(value) {
+  const result = {};
+  for (const [optionKey, configKey] of Object.entries(FLUID_CONFIG_KEYS)) {
+    if (optionKey in value) result[configKey] = value[optionKey];
+  }
+  return result;
 }
 
 function sceneBounds(scenes, selectedSceneAddress) {
@@ -343,6 +568,9 @@ function safeCreateFluid(canvas) {
     return {
       supported: false,
       clear() {},
+      getConfig() { return {}; },
+      randomSplats() {},
+      setConfig() {},
       update() {}
     };
   }
@@ -359,10 +587,20 @@ function walk(container, visit) {
 }
 
 function vector3(value, fallback) {
-  if (!value || value.length < 3) return [...fallback];
+  if (!value || value.length < 3) return fallback ? [...fallback] : undefined;
   return [0, 1, 2].map((index) => (
-    Number.isFinite(Number(value[index])) ? Number(value[index]) : fallback[index]
+    Number.isFinite(Number(value[index]))
+      ? Number(value[index])
+      : fallback?.[index]
   ));
+}
+
+function finiteOr(value, fallback) {
+  return Number.isFinite(Number(value)) ? Number(value) : fallback;
+}
+
+function booleanOr(value, fallback) {
+  return typeof value === 'boolean' ? value : fallback;
 }
 
 function clamp(value, min, max) {

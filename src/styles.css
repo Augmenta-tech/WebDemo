@@ -49,13 +49,20 @@ button, input, select { font: inherit; }
 
 #canvas-host .data-visuals {
   position: absolute;
-  z-index: 2;
+  z-index: 1;
   inset: 0;
   pointer-events: none;
 }
 
 #canvas-host .fluid-visuals {
   background: #000;
+}
+
+#canvas-host .debug-viewer-canvas {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: transparent;
 }
 
 .viewer-overlay {
@@ -68,6 +75,7 @@ button, input, select { font: inherit; }
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
+  z-index: 8;
   pointer-events: none;
   background: linear-gradient(to bottom, rgba(9, 11, 15, .72), transparent);
 }
@@ -425,6 +433,86 @@ button.subtle-button.active {
   box-shadow: none;
   accent-color: var(--accent);
   -webkit-tap-highlight-color: transparent;
+}
+
+
+.visual-preset-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: var(--section-space-relaxed);
+}
+
+.visual-master-toggle {
+  margin-bottom: var(--section-space);
+}
+
+.visual-controls {
+  gap: var(--section-space-relaxed);
+}
+
+.visual-control-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--section-space);
+}
+
+.visual-range-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 10px;
+  margin: 0;
+  color: #aab3c2;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.visual-range-control > span {
+  min-width: 0;
+}
+
+.visual-range-control output {
+  min-width: 34px;
+  color: #8791a2;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 9.5px;
+  text-align: right;
+}
+
+.visual-range-control input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  accent-color: var(--accent);
+}
+
+.visual-range-control input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.visual-toggle-grid {
+  margin-top: 2px;
+}
+
+.visual-action-button {
+  width: 100%;
+}
+
+.data-overlay-controls {
+  margin-bottom: var(--section-space-relaxed);
+}
+
+.data-panel-actions {
+  margin-top: var(--section-space-relaxed);
 }
 
 .debug-content { display: grid; gap: 9px; }

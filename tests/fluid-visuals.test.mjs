@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  boundingBoxSplatRadius,
   emitterBudget,
   projectPointToUv,
   selectEmitterIndices
@@ -13,8 +14,7 @@ test('emitter budget stays bounded and shares capacity across clouds', () => {
   assert.equal(emitterBudget(2), 8);
   assert.equal(emitterBudget(3), 5);
   assert.equal(emitterBudget(6), 2);
-  assert.equal(emitterBudget(24), 1);
-  assert.equal(emitterBudget(100), 1);
+  assert.equal(emitterBudget(16), 1);
 });
 
 test('point-cloud subsampling is deterministic and evenly distributed', () => {
@@ -22,9 +22,9 @@ test('point-cloud subsampling is deterministic and evenly distributed', () => {
   assert.deepEqual(selectEmitterIndices(4, 12), [0, 1, 2, 3]);
   assert.deepEqual(selectEmitterIndices(0, 4), []);
 
-  const indices = selectEmitterIndices(1000, 12);
-  assert.equal(indices.length, 12);
-  assert.equal(new Set(indices).size, 12);
+  const indices = selectEmitterIndices(1000, 8);
+  assert.equal(indices.length, 8);
+  assert.equal(new Set(indices).size, 8);
   assert.ok(indices.every((index) => index >= 0 && index < 1000));
 });
 
@@ -36,7 +36,15 @@ test('point positions map to fluid UV coordinates using scene bounds', () => {
   assert.equal(projectPointToUv([Number.NaN, 0, 0], bounds), undefined);
 });
 
-test('fluid engine preserves PavelDoGreat default visual parameters and removes pointer input', () => {
+test('bounding-box splat radius follows projected box footprint', () => {
+  const bounds = { minX: -5, maxX: 5, minY: 0, maxY: 4 };
+
+  assert.ok(Math.abs(boundingBoxSplatRadius([0.5, 1.6, 0.5], bounds) - 0.5) < 1e-9);
+  assert.equal(boundingBoxSplatRadius([0.01, 0.01, 0.01], bounds), 0.01);
+  assert.equal(boundingBoxSplatRadius([10, 4, 1], bounds), 1);
+});
+
+test('fluid engine preserves Pavel defaults and exposes the GUI control API', () => {
   const source = readFileSync(new URL('../src/fluid.js', import.meta.url), 'utf8');
 
   for (const expected of [
@@ -68,4 +76,51 @@ test('fluid engine preserves PavelDoGreat default visual parameters and removes 
   assert.ok(!source.includes("canvas.addEventListener('mousedown'"));
   assert.ok(!source.includes("canvas.addEventListener('touchstart'"));
   assert.ok(source.includes('function applyEmitters (emitters)'));
+  assert.ok(source.includes('function setConfig (next = {})'));
+  assert.ok(source.includes('function randomSplats (amount ='));
+  assert.ok(source.includes('splat(x, y, dx, dy, color, emitter.radius)'));
+});
+
+test('Visuals exposes Pavel controls, presets, and Augmenta splat inputs', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  for (const id of [
+    'visual-preset',
+    'visual-dye-resolution',
+    'visual-sim-resolution',
+    'visual-density-dissipation',
+    'visual-velocity-dissipation',
+    'visual-pressure',
+    'visual-curl',
+    'visual-splat-radius',
+    'visual-shading',
+    'visual-colorful',
+    'visual-paused',
+    'visual-random-splats',
+    'visual-bloom',
+    'visual-bloom-intensity',
+    'visual-bloom-threshold',
+    'visual-sunrays',
+    'visual-sunrays-weight',
+    'visual-splat-input'
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `missing visual control: ${id}`);
+  }
+
+  assert.ok(html.includes('<option value="centroid">Centroid</option>'));
+  assert.ok(html.includes('<option value="point-clouds" selected>Point clouds</option>'));
+  assert.ok(html.includes('<option value="bounding-box">Bounding box</option>'));
+  assert.ok(!html.includes('id="display-section"'));
+  assert.ok(html.includes('<span class="panel-title">Augmenta data</span>'));
+});
+
+test('Three.js debug renderer is transparent so selected data draws above fluid', () => {
+  const viewer = readFileSync(new URL('../src/viewer.js', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+  assert.ok(viewer.includes('new THREE.WebGLRenderer({ antialias: true, alpha: true })'));
+  assert.ok(viewer.includes("renderer.domElement.classList.add('debug-viewer-canvas')"));
+  assert.ok(viewer.includes('renderer.setClearColor(0x000000, 0)'));
+  assert.ok(viewer.includes('sceneHelperGroup.visible = scene'));
+  assert.ok(styles.includes('#canvas-host .debug-viewer-canvas'));
 });
