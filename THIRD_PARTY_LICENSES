@@ -74,8 +74,11 @@ SOFTWARE.
 Project: https://github.com/PavelDoGreat/WebGL-Fluid-Simulation
 License: MIT
 
-The fluid solver in src/fluid.js adapts techniques and shader logic from
-Pavel Dobryakov's WebGL Fluid Simulation.
+The fluid engine in src/fluid.js is a reusable adaptation of Pavel Dobryakov's
+WebGL Fluid Simulation. It preserves the reference rendering pipeline and
+default visual parameters while replacing mouse/touch input with externally
+supplied Augmenta point-cloud emitters. The original dithering texture is kept
+at src/LDR_LLL1_0.png.
 
 MIT License
 
