@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -53,4 +54,15 @@ test('saved presets can be loaded and deleted by ID', () => {
   assert.deepEqual(getUserPreset(saved.presets, saved.preset.id), saved.preset);
   assert.deepEqual(removeUserPreset(saved.presets, saved.preset.id), []);
   assert.equal(getUserPreset(saved.presets, 'default'), undefined);
+});
+
+
+test('visual presets share the existing application persistence object', () => {
+  const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+
+  assert.equal((source.match(/localStorage\.setItem/g) || []).length, 1);
+  assert.ok(source.includes("const SETTINGS_STORAGE_KEY = 'augmenta-webdemo-settings:v1'"));
+  assert.ok(source.includes('visualPreset: activeVisualPresetId'));
+  assert.ok(source.includes('visualPresets: userVisualPresets'));
+  assert.ok(source.includes('normalizeUserPresets(savedPreferences.visualPresets)'));
 });
