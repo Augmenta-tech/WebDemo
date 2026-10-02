@@ -54,6 +54,10 @@ button, input, select { font: inherit; }
   pointer-events: none;
 }
 
+#canvas-host .fluid-visuals {
+  background: #000;
+}
+
 .viewer-overlay {
   position: absolute;
   top: 0;
