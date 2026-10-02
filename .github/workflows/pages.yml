@@ -39,10 +39,6 @@ jobs:
           npm ci --prefix vendor/AugmentaClientSDK-JS --no-audit --no-fund
           npm test --prefix vendor/AugmentaClientSDK-JS
 
-      - name: Install Pages runtime dependencies
-        shell: bash
-        run: |
-          npm install --prefix .pages-runtime --no-save --no-package-lock --ignore-scripts three@0.186.1
 
       - name: Validate example JavaScript
         shell: bash
