@@ -115,7 +115,7 @@ test('Visuals exposes Pavel controls, presets, and Augmenta splat inputs', () =>
   assert.ok(!html.includes('id="display-section"'));
   assert.ok(html.includes('<span class="panel-title">Augmenta data</span>'));
   assert.ok(
-    html.indexOf('id="debug-section"') < html.indexOf('id="visuals-section"'),
+    html.indexOf('id="data-section"') < html.indexOf('id="visuals-section"'),
     'Augmenta data should appear before Visuals'
   );
   assert.ok(html.includes('./augmenta-favicon.png?v=5'));
