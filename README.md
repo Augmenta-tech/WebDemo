@@ -10,29 +10,47 @@ kept intact.
 
 ## Visuals
 
-The default visual mode is now a direct adaptation of
-[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation) at upstream commit `a2d292931f19d9b3b9f564e23e6c32729d2121c3`.
+The fluid renderer is a direct adaptation of
+[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation)
+at upstream commit `a2d292931f19d9b3b9f564e23e6c32729d2121c3`.
 
-The simulation keeps the reference project's default visual parameters and
-rendering pipeline: 128 simulation resolution, 1024 dye resolution, density and
-velocity dissipation, pressure solve, vorticity, shading, bloom, sunrays, and the
-original dithering texture.
+The Visuals panel exposes the same interactive parameters as the reference web
+demo, except the Capture section:
 
-The only intentional input change is the effector source:
+- quality and simulation resolution
+- density and velocity diffusion
+- pressure, vorticity, and splat radius
+- shading, colorful mode, pause, and random splats
+- bloom enabled/intensity/threshold
+- sunrays enabled/weight
 
-- mouse and multitouch input are removed
-- Augmenta point clouds are projected to the fluid canvas
-- each cloud is evenly subsampled to a bounded number of emitters
-- sampled point motion drives the same splat force path used by pointer motion
-- emitter colors follow the reference simulation's colorful pointer behavior
-- emitter count is shared across simultaneous point clouds to keep the effect
-  responsive and visually close to the original
+The preset system currently ships with **Default**, which is the current
+reference configuration. Any manual change is shown as **Custom**; additional
+named presets can be added later without changing the control flow.
 
-The fluid canvas is the primary visual when **Visuals → Fluid simulation** is
-enabled. Disable it to reveal the original Three.js debug viewer underneath.
+### Augmenta splat input
 
-The adapted fluid engine lives in `src/fluid.js`; the point-cloud-to-emitter
-bridge is isolated in `src/visuals.js`.
+The **Visuals → Augmenta → Splat input** control selects how tracking drives the
+same Pavel splat pipeline:
+
+- **Centroid** — one splat per tracked cluster, centered on its centroid
+- **Point clouds** — evenly subsampled point-cloud points act as multiple splat
+  effectors
+- **Bounding box** — one centroid splat whose radius is derived from the
+  projected bounding-box footprint
+
+Point and centroid motion provide the splat velocity; cluster velocity is used
+as a fallback when point correspondence is not stable.
+
+## Augmenta data
+
+The former Display section and Live debug data section are combined as
+**Augmenta data**.
+
+Scene selection and the Clusters, Point clouds, Scenes, Zones, and Velocity
+vectors toggles use the original Three.js example renderer. Enabled overlays are
+rendered transparently **above the fluid canvas**, so they can be used as live
+debug information without replacing the visual simulation.
 
 ## Run
 
