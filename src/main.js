@@ -50,7 +50,7 @@ const ui = {
   debug: $('#debug-content'), clear: $('#clear'), resetCamera: $('#reset-camera'), scenes: $('#scenes'),
   sidebarToggle: $('#sidebar-toggle'), viewerTitle: $('.viewer-title'), connectionQrVisibility: $('.connection-qr-visibility'),
   connectionSection: $('#connection-section'), connectionAdvanced: $('#connection-advanced'), connectionAdvancedSummary: $('#connection-advanced-summary'),
-  debugSection: $('#debug-section'), visualsSection: $('#visuals-section'), visualsSectionSummary: $('#visuals-section-summary'), appVersion: $('#app-version'),
+  dataSection: $('#data-section'), visualsSection: $('#visuals-section'), visualsSectionSummary: $('#visuals-section-summary'), appVersion: $('#app-version'),
   showClusters: $('#show-clusters'), showPoints: $('#show-points'), showScene: $('#show-scene'), showZones: $('#show-zones'), showVectors: $('#show-vectors'),
   visualPreset: $('#visual-preset'), visualPresetSave: $('#visual-preset-save'), visualPresetDelete: $('#visual-preset-delete'), visualEnabled: $('#visual-enabled'),
   visualDyeResolution: $('#visual-dye-resolution'), visualSimResolution: $('#visual-sim-resolution'),
@@ -176,7 +176,7 @@ function savePreferences() {
         connection: ui.connectionSection.open,
         connectionAdvanced: ui.connectionAdvanced.open,
         visuals: ui.visualsSection.open,
-        data: ui.debugSection.open
+        data: ui.dataSection.open
       }
     }
   };
@@ -251,7 +251,7 @@ function restorePreferences() {
     ['connection', ui.connectionSection],
     ['connectionAdvanced', ui.connectionAdvanced],
     ['visuals', ui.visualsSection],
-    ['data', ui.debugSection, 'debug']
+    ['data', ui.dataSection, 'debug']
   ]) {
     const saved = sectionPreferences[key] ?? sectionPreferences[legacyKey];
     if (typeof saved === 'boolean') element.open = saved;
@@ -398,7 +398,7 @@ function renderDebug(force = false) {
     zoneNameForAddress,
     zoneShapeForAddress,
     force,
-    ui.debugSection.open
+    ui.dataSection.open
   );
 }
 
@@ -799,9 +799,9 @@ for (const section of [
   section.addEventListener('toggle', savePreferences);
 }
 
-ui.debugSection.addEventListener('toggle', () => {
+ui.dataSection.addEventListener('toggle', () => {
   savePreferences();
-  if (ui.debugSection.open) renderDebug(true);
+  if (ui.dataSection.open) renderDebug(true);
 });
 
 // The panel overlays the renderer. Shift the camera projection by the visible
