@@ -191,10 +191,6 @@ export function createVisuals(host) {
     if (previousEnabled !== options.enabled) reset();
   }
 
-  function getOptions() {
-    return { ...options };
-  }
-
   function getPreset(name) {
     const preset = presets[name];
     return preset ? { label: preset.label, options: { ...preset.options } } : undefined;
@@ -236,26 +232,18 @@ export function createVisuals(host) {
     fluid.clear();
   }
 
-  // Kept for compatibility with the Three.js-based application shell.
-  // Debug display visibility is handled exclusively by viewer.js.
-  function setVisibility() {}
-  function setRightInset() {}
-
   requestAnimationFrame(animate);
 
   return {
     clearSetup,
     clearTracking,
-    getOptions,
     getPreset,
     getPresets,
     randomSplats,
     renderFrame,
     renderSetup,
     reset,
-    setOptions,
-    setRightInset,
-    setVisibility
+    setOptions
   };
 }
 
