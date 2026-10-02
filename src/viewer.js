@@ -175,6 +175,7 @@ export function createViewer(host) {
     else trails.clearRect(0, 0, width, height);
 
     if (visuals.grid) drawGrid(projection);
+    if (visibility.scene) drawSceneFrame(projection);
     if (visuals.trails) ctx.drawImage(trailsCanvas, 0, 0, width, height);
 
     const visibleObjects = [...objects.values()]
@@ -235,7 +236,7 @@ export function createViewer(host) {
     trails.globalCompositeOperation = 'lighter';
     for (const view of objects.values()) {
       if (!view.points?.length) continue;
-      drawPointCloud(trails, view, p, .12, 1.2, false);
+      drawPointCloud(trails, { ...view, color: paletteColor(view.color, visuals.palette) }, p, .12, 1.2, false);
     }
     trails.restore();
   }
@@ -259,6 +260,15 @@ export function createViewer(host) {
     ctx.strokeStyle = 'rgba(195, 215, 255, .26)';
     ctx.lineWidth = 1.2;
     line(ctx, p.marginX, p.bottom, p.usableWidth - p.marginX, p.bottom);
+    ctx.restore();
+  }
+
+  function drawSceneFrame(p) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(210, 222, 255, .2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 8]);
+    ctx.strokeRect(p.marginX, p.top, p.usableWidth - p.marginX * 2, p.bottom - p.top);
     ctx.restore();
   }
 
@@ -424,7 +434,7 @@ export function createViewer(host) {
     setRightInset,
     setVisibility,
     setVisualOptions,
-    resetCamera() {},
+    resetCamera() { trails.clearRect(0, 0, width, height); },
     getCameraView() { return undefined; },
     setCameraView() { return false; },
     setCameraChangeHandler() {},
