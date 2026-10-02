@@ -442,6 +442,17 @@ button.subtle-button.active {
   margin-bottom: var(--section-space-relaxed);
 }
 
+.preset-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.preset-actions .text-action[disabled] {
+  color: #626b7a;
+  cursor: default;
+}
+
 .visual-master-toggle {
   margin-bottom: var(--section-space);
 }
